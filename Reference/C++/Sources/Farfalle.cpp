@@ -16,7 +16,7 @@ http://creativecommons.org/publicdomain/zero/1.0/
 
 #include "Farfalle.h"
 
-static void _assert(bool condition, const std::string &synopsis, const char *fct)
+static void Farfalle_assert(bool condition, const std::string &synopsis, const char *fct)
 {
 	if (!condition)
 	{
@@ -25,9 +25,9 @@ static void _assert(bool condition, const std::string &synopsis, const char *fct
 }
 
 #if defined(__GNUC__)
-#define assert(cond, msg)  _assert(cond, msg, __PRETTY_FUNCTION__)
+#define assert(cond, msg)  Farfalle_assert(cond, msg, __PRETTY_FUNCTION__)
 #else
-#define assert(cond, msg)  _assert(cond, msg, __FUNCTION__)
+#define assert(cond, msg)  Farfalle_assert(cond, msg, __FUNCTION__)
 #endif
 
 /* IdentityRollingFunction */

@@ -142,11 +142,10 @@ static void performTestXoofffSANSE_OneInput(BitLength keyLen, BitLength dataLen,
         BitLength len;
 
         printf("Key of %d bits:", (int)keyLen);
-        keyLen += 7;
-        keyLen /= 8;
-        for(i=0; (i<keyLen) && (i<16); i++)
+        len = (keyLen + 7) / 8;
+        for(i=0; (i<len) && (i<16); i++)
             printf(" %02x", (int)key[i]);
-        if (keyLen > 16)
+        if (len > 16)
             printf(" ...");
         printf("\n");
 
@@ -154,16 +153,15 @@ static void performTestXoofffSANSE_OneInput(BitLength keyLen, BitLength dataLen,
         len = (dataLen + 7) /8;
         for(i=0; (i<len) && (i<16); i++)
             printf(" %02x", (int)input[i]);
-        if (dataLen > 16)
+        if (len > 16)
             printf(" ...");
         printf("\n");
 
         printf("AD of %d bits:", (int)ADLen);
-        ADLen += 7;
-        ADLen /= 8;
-        for(i=0; (i<ADLen) && (i<16); i++)
+        len = (ADLen + 7) / 8;
+        for(i=0; (i<len) && (i<16); i++)
             printf(" %02x", (int)AD[i]);
-        if (ADLen > 16)
+        if (len > 16)
             printf(" ...");
         printf("\n\n");
         fflush(stdout);
@@ -180,7 +178,7 @@ static void performTestXoofffSANSE_OneInput(BitLength keyLen, BitLength dataLen,
 
         assert(!memcmp(input,inputPrime,(dataLen + 7) / 8));
 		rSpongeChecksum.absorb(output, 8 * ((dataLen + 7) / 8));
-		rSpongeChecksum.absorb(tag, 8 * tagLenSANE);
+		rSpongeChecksum.absorb(tag, 8 * tagLenSANSE);
         #ifdef VERBOSE_SANSE
         {
             unsigned int i;
@@ -198,8 +196,8 @@ static void performTestXoofffSANSE_OneInput(BitLength keyLen, BitLength dataLen,
                 printf(" %02x", (int)output[i]);
             printf("\n");
 
-            printf("Tag of %d bytes:", (int)tagLenSANE);
-            for(i=0; i<tagLenSANE; i++)
+            printf("Tag of %d bytes:", (int)tagLenSANSE);
+            for(i=0; i<tagLenSANSE; i++)
                 printf(" %02x", (int)tag[i]);
             printf("\n");
             fflush(stdout);
@@ -944,7 +942,7 @@ void testXooModes(void)
     writeTestXoofffWBCAE("Xoofff-WBC-AE.txt");
 #endif
 
-    selfTestXoofffSANSE("\x8b\x52\x1b\x36\x04\x84\x8a\x83\xf1\x0b\x49\x3d\x8e\xcf\xc6\xd5");
+    selfTestXoofffSANSE("\x06\xed\xf9\xa6\x70\xb3\xfe\x83\x34\x2c\xb4\x18\x75\x0d\xf2\xcc");
     selfTestXoofffSANE("\xf7\xf5\xb8\x84\x08\x96\xf7\xa8\xb5\xfa\x83\x7f\xa0\x90\x0a\x05");
     selfTestXoofffWBC("\x96\x09\x5c\xeb\x82\xa4\x7c\x94\xfc\x90\x42\xd8\xb0\xe3\xc8\xe1");
     selfTestXoofffWBCAE("\x45\x56\x9c\x96\x78\x20\x4b\xd4\xfb\xc0\xfe\xcb\x59\x6c\x85\x56");
