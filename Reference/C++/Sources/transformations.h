@@ -13,6 +13,7 @@ http://creativecommons.org/publicdomain/zero/1.0/
 #define _TRANSFORMATIONS_H_
 #include <iostream>
 #include <string>
+#include "bitstring.h"
 #include "types.h"
 
 /**
@@ -77,6 +78,38 @@ public:
     virtual void operator()(UINT8 * state) const {(void)state;}
     virtual std::string getDescription() const { return "Identity"; }
     virtual void inverse(UINT8 * state) const {(void)state;}
+};
+
+/**
+ * Class implementing an iterable permutation
+ */
+class BaseIterableTransformation
+{
+	public:
+		const unsigned int            width;
+		const unsigned int            rounds;
+
+		BaseIterableTransformation(unsigned int width, unsigned int rounds) : width(width), rounds(rounds) {}
+
+		virtual BitString operator()(const BitString &state) const = 0;
+};
+
+template<class T>
+class IterableTransformation : public BaseIterableTransformation
+{
+	protected:
+		T                     f;
+
+	public:
+		IterableTransformation(unsigned int width) : BaseIterableTransformation(width, 0), f(width) {}
+		IterableTransformation(unsigned int width, unsigned int rounds) : BaseIterableTransformation(width, rounds), f(width, rounds) {}
+
+		BitString operator()(const BitString &state) const
+		{
+			BitString state2 = state;
+			f(state2.array());
+			return state2;
+		}
 };
 
 #endif

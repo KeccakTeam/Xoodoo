@@ -19,6 +19,8 @@ http://creativecommons.org/publicdomain/zero/1.0/
 #include "Xoofff.h"
 #include "Xoofff-test.h"
 #include "XooModes-test.h"
+#include "Xoodyak.h"
+#include "Xoodyak-test.h"
 
 void testXoodoo(int iterations, std::ostream &os)
 {
@@ -49,6 +51,7 @@ int main(int argc, char *argv[])
 		//testXoodoo(384, std::cout);
 		testXoofff();
 		testXooModes();
+		testXoodyak();
 
 		std::cout << std::flush;
 	}

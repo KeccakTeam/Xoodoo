@@ -20,38 +20,6 @@ http://creativecommons.org/publicdomain/zero/1.0/
 #include "types.h"
 
 /**
- * Class implementing an iterable permutation
- */
-class BaseIterableTransformation
-{
-	public:
-		const unsigned int            width;
-		const unsigned int            rounds;
-
-		BaseIterableTransformation(unsigned int width, unsigned int rounds) : width(width), rounds(rounds) {}
-
-		virtual BitString operator()(const BitString &state) const = 0;
-};
-
-template<class T>
-class IterableTransformation : public BaseIterableTransformation
-{
-	protected:
-		T                     f;
-
-	public:
-		IterableTransformation(unsigned int width) : BaseIterableTransformation(width, 0), f(width) {}
-		IterableTransformation(unsigned int width, unsigned int rounds) : BaseIterableTransformation(width, rounds), f(width, rounds) {}
-
-		BitString operator()(const BitString &state) const
-		{
-			BitString state2 = state;
-			f(state2.array());
-			return state2;
-		}
-};
-
-/**
  * Class implementing a rolling function
  */
 class BaseRollingFunction

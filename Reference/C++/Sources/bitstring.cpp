@@ -26,17 +26,19 @@ static UINT8 enc8(unsigned int x)
         return UINT8(x);
 }
 
-static void Farfalle_assert(bool condition, const std::string &synopsis, const char *fct)
+static void ref_assert(bool condition, const std::string &synopsis, const char *fct)
 {
     if ( !condition ) {
         throw Exception((std::string(fct) + "(): " + synopsis).data());
     }
 }
 
+#undef assert
+
 #if defined(__GNUC__)
-#define assert(cond, msg)  Farfalle_assert(cond, msg, __PRETTY_FUNCTION__)
+#define assert(cond, msg)  ref_assert(cond, msg, __PRETTY_FUNCTION__)
 #else
-#define assert(cond, msg)  Farfalle_assert(cond, msg, __FUNCTION__)
+#define assert(cond, msg)  ref_assert(cond, msg, __FUNCTION__)
 #endif
 
 void BitString::truncateLastByte(void)
