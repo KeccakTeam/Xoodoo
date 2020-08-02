@@ -1,0 +1,46 @@
+Notation:
+Na, Nm, Nc : the number of complete blocks of associated data, plaintext, and ciphertext, respectively
+Ina, Inm, Inc : binary variables equal to 1 if the last block of the respective data type is incomplete, and 0 otherwise
+Bla, Blm, Blc : the number of bytes in the incomplete block of associated data, plaintext, and ciphertext, respectively.
+
+
+Variants:
+
+v1: xoodyak_1r
+
+a. Design goal:
+Support for authenticated encryption and decryption (no hashing).
+Basic iterative, providing trade-off between throughput and area.
+No BRAMs, no DSP units.
+
+b. Supported maximum sizes of inputs: 
+2^{50}-1
+
+c. Reference software implementation: 
+/xoodyak/Implementations/crypto_aead/xoodyakv1/ref
+in the submission package to NIST 
+https://csrc.nist.gov/Projects/lightweight-cryptography/round-2-candidates
+
+d. Non-default values of generics and constants
+None
+
+e. Block sizes
+AD block size = 352 bits
+Plaintext/Ciphertext block size = 192 bits
+
+f. Execution times
+Execution time of authenticated encryption:
+27+(11*Na+Ina*ceil(Bla/4)+15*(Na+1))+(6*Nm+Inm*ceil(Blm/4)+15*(Nm+1))+18
+
+Execution time of authenticated decryption:
+27+(11*Na+Ina*ceil(Bla/4)+15*(Na+1))+(6*Nc+Inm*ceil(Blc/4)+15*(Nc+1))+19
+
+g. Latencies
+Latency of authenticated encryption:
+14
+
+Latency of authenticated decryption:
+14
+
+h. Difference between execution times for a new key and the same key
+0
