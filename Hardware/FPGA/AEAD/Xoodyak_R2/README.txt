@@ -1,7 +1,6 @@
 Hardware Design Group: Xoodyak Team + Silvia
 Primary Hardware Designers: Silvia Mella, silvia.mella@st.com
-Academic advisors/Program managers: -
-LWC candidate: Xoodyak
+LWC candidate: Xoodyak (without hashing)
 
 Xoodyak Hardware Implementation
 ===============================
@@ -41,3 +40,11 @@ Notes
 
 The implementation does not include hash functionality.
 The implementation makes use of the Development Package for Hardware Implementations Compliant with the Hardware API for Lightweight Cryptography.
+
+The implementation allows to configure at design time the number of rounds that are computed in a single clock cycle.
+Such number can be configured by setting the constant 
+    roundsPerCycle
+in configuration file src_rtl/design_pkg.vhd.
+The constant roundsPerCycle can be set to any integer divisor of 12, i.e. 1,2,3,4,6 or 12.
+
+KAT is the same for all configurations.

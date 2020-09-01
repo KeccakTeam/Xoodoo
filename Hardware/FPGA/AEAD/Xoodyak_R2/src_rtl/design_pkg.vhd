@@ -16,8 +16,10 @@ use IEEE.STD_LOGIC_1164.all;
 
 package Design_pkg is
 
-    --! user specific, algorithm indepent parameters
-    -- This module implements one variant of xoodyak
+    --! This module implements Xoodyak with n = 1, 2, 3, 4, 6, or 12 rounds per clock cycle.
+    --! Specify the number of rounds per clock cycle by setting the constant roundsPerCycle to a valid value.
+    --! Valid values are: 1, 2, 3, 4, 6, and 12
+    constant roundsPerCycle : integer := 1;
 
 --------------------------------------------------------------------------------
 ------------------------- DO NOT CHANGE ANYTHING BELOW -------------------------
@@ -90,24 +92,6 @@ end Design_pkg;
 
 
 package body Design_pkg is
-
-    -- The following construct is used to specify all varaint dependent parameters
-    -- and make them selectable by the constant "variant" of type "set_selector".
-
-    -- type vector_of_constants_t is array (1 to 2) of integer; -- two variant dependent constants
-    -- type set_of_vector_of_constants_t is array (set_selector) of vector_of_constants_t;
-    -- -- specify all variant dependent parameters (CCW, CCSW) for all variants (xoodyak_{8,16,32})
-    -- constant set_of_vector_of_constants : set_of_vector_of_constants_t :=
-      -- --   CCW
-      -- --   |   CCSW
-      -- --   |   |
-      -- (  --( 8,  8), -- xoodyak_8
-         -- (16, 16), -- xoodyak_16
-         -- (32, 32)  -- xoodyak_32
-      -- );
-    -- -- select the correct set of parameters
-    -- alias vector_of_constants is set_of_vector_of_constants(variant);
-
 
     --! design parameters needed by the PreProcessor, PostProcessor, and LWC
     constant TAG_SIZE        : integer := 128; --! Tag size

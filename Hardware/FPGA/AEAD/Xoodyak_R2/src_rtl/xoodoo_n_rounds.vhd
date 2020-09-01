@@ -9,15 +9,16 @@
 --------------------------------------------------------------------------------
 
 library work;
-	use work.xoodoo_globals.all;
-	
+    use work.xoodoo_globals.all;
+    use work.design_pkg.all;
+
 library ieee;
     use ieee.std_logic_1164.all;
-    use ieee.std_logic_arith.all;	
+    use ieee.std_logic_arith.all;
 
 
 entity xoodoo_n_rounds is
-    generic( roundPerCycle : integer  := 1);
+    generic( roundPerCycle : integer  := roundsPerCycle);
     port (
         state_in     : in  x_state_type;
         state_out    : out x_state_type;
@@ -76,7 +77,7 @@ ALL_ROUNDS : for I in state_rounds'range generate
             rc => xoodoo_rc_value(I),
             state_out => xoodoo_state_out(I)
         );
-        
+
     rc_I : xoodoo_rc
         port map(
             state_in => xoodoo_rc_state_in(I),

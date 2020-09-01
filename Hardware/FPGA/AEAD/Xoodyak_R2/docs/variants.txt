@@ -6,7 +6,8 @@ Bla, Blm, Blc : the number of bytes in the incomplete block of associated data, 
 
 Variants:
 
-v1: xoodyak_1r
+-----------------------------------------------------------------------------------------------------------------
+v1: xoodyak_without_hash_1R_per_Cycle
 
 a. Design goal:
 Support for authenticated encryption and decryption (no hashing).
@@ -30,17 +31,220 @@ Plaintext/Ciphertext block size = 192 bits
 
 f. Execution times
 Execution time of authenticated encryption:
-27+(11*Na+Ina*ceil(Bla/4)+15*(Na+1))+(6*Nm+Inm*ceil(Blm/4)+15*(Nm+1))+18
+16 + 12 + max(1,11*Na+Ina*ceil(Bla/4)) + (3+12)*(max(1,Na+Ina)) + 6*Nm + Inm*ceil(Blm/4) + (3+12)*(max(1,Nm+Inm)) + 6 + 12
 
 Execution time of authenticated decryption:
-27+(11*Na+Ina*ceil(Bla/4)+15*(Na+1))+(6*Nc+Inm*ceil(Blc/4)+15*(Nc+1))+19
+16 + 12 + max(1,11*Na+Ina*ceil(Bla/4)) + (3+12)*(max(1,Na+Ina)) + 6*Nc + Inc*ceil(Blc/4) + (3+12)*(max(1,Nc+Inc)) + 6 + 12 + 1
 
 g. Latencies
 Latency of authenticated encryption:
-14
+2 + 12
 
 Latency of authenticated decryption:
-14
+2 + 12
+
+h. Difference between execution times for a new key and the same key
+0
+
+-----------------------------------------------------------------------------------------------------------------
+v2: xoodyak_without_hash_2R_per_Cycle
+
+a. Design goal:
+Support for authenticated encryption and decryption (no hashing).
+Unrolled, providing trade-off between throughput and area.
+No BRAMs, no DSP units.
+
+b. Supported maximum sizes of inputs: 
+2^{50}-1
+
+c. Reference software implementation: 
+/xoodyak/Implementations/crypto_aead/xoodyakv1/ref
+in the submission package to NIST 
+https://csrc.nist.gov/Projects/lightweight-cryptography/round-2-candidates
+
+d. Non-default values of generics and constants
+constant roundsPerCycle : integer := 2;
+
+e. Block sizes
+AD block size = 352 bits
+Plaintext/Ciphertext block size = 192 bits
+
+f. Execution times
+Execution time of authenticated encryption:
+16 + 6 + max(1,11*Na+Ina*ceil(Bla/4)) + (3+6)*(max(1,Na+Ina)) + 6*Nm + Inm*ceil(Blm/4) + (3+6)*(max(1,Nm+Inm)) + 6 + 6
+
+Execution time of authenticated decryption:
+16 + 6 + max(1,11*Na+Ina*ceil(Bla/4)) + (3+6)*(max(1,Na+Ina)) + 6*Nc + Inc*ceil(Blc/4) + (3+6)*(max(1,Nc+Inc)) + 6 + 6 + 1
+
+g. Latencies
+Latency of authenticated encryption:
+2 + 6
+
+Latency of authenticated decryption:
+2 + 6
+
+h. Difference between execution times for a new key and the same key
+0
+
+-----------------------------------------------------------------------------------------------------------------
+v3: xoodyak_without_hash_3R_per_Cycle
+
+a. Design goal:
+Support for authenticated encryption and decryption (no hashing).
+Unrolled, providing trade-off between throughput and area.
+No BRAMs, no DSP units.
+
+b. Supported maximum sizes of inputs: 
+2^{50}-1
+
+c. Reference software implementation: 
+/xoodyak/Implementations/crypto_aead/xoodyakv1/ref
+in the submission package to NIST 
+https://csrc.nist.gov/Projects/lightweight-cryptography/round-2-candidates
+
+d. Non-default values of generics and constants
+constant roundsPerCycle : integer := 3;
+
+e. Block sizes
+AD block size = 352 bits
+Plaintext/Ciphertext block size = 192 bits
+
+f. Execution times
+Execution time of authenticated encryption:
+16 + 4 + max(1,11*Na+Ina*ceil(Bla/4)) + (3+4)*(max(1,Na+Ina)) + 6*Nm + Inm*ceil(Blm/4) + (3+4)*(max(1,Nm+Inm)) + 6 + 4
+
+Execution time of authenticated decryption:
+16 + 4 + max(1,11*Na+Ina*ceil(Bla/4)) + (3+4)*(max(1,Na+Ina)) + 6*Nc + Inc*ceil(Blc/4) + (3+4)*(max(1,Nc+Inc)) + 6 + 4 + 1
+
+g. Latencies
+Latency of authenticated encryption:
+2 + 4
+
+Latency of authenticated decryption:
+2 + 4
+
+h. Difference between execution times for a new key and the same key
+0
+
+
+-----------------------------------------------------------------------------------------------------------------
+v4: xoodyak_without_hash_4R_per_Cycle
+
+a. Design goal:
+Support for authenticated encryption and decryption (no hashing).
+Unrolled, providing trade-off between throughput and area.
+No BRAMs, no DSP units.
+
+b. Supported maximum sizes of inputs: 
+2^{50}-1
+
+c. Reference software implementation: 
+/xoodyak/Implementations/crypto_aead/xoodyakv1/ref
+in the submission package to NIST 
+https://csrc.nist.gov/Projects/lightweight-cryptography/round-2-candidates
+
+d. Non-default values of generics and constants
+constant roundsPerCycle : integer := 4;
+
+e. Block sizes
+AD block size = 352 bits
+Plaintext/Ciphertext block size = 192 bits
+
+f. Execution times
+Execution time of authenticated encryption:
+16 + 3 + max(1,11*Na+Ina*ceil(Bla/4)) + (3+3)*(max(1,Na+Ina)) + 6*Nm + Inm*ceil(Blm/4) + (3+3)*(max(1,Nm+Inm)) + 6 + 3
+
+Execution time of authenticated decryption:
+16 + 3 + max(1,11*Na+Ina*ceil(Bla/4)) + (3+3)*(max(1,Na+Ina)) + 6*Nc + Inc*ceil(Blc/4) + (3+3)*(max(1,Nc+Inc)) + 6 + 3 + 1
+
+g. Latencies
+Latency of authenticated encryption:
+2 + 3
+
+Latency of authenticated decryption:
+2 + 3
+
+h. Difference between execution times for a new key and the same key
+0
+
+
+-----------------------------------------------------------------------------------------------------------------
+v5: xoodyak_without_hash_6R_per_Cycle
+
+a. Design goal:
+Support for authenticated encryption and decryption (no hashing).
+Unrolled, providing trade-off between throughput and area.
+No BRAMs, no DSP units.
+
+b. Supported maximum sizes of inputs: 
+2^{50}-1
+
+c. Reference software implementation: 
+/xoodyak/Implementations/crypto_aead/xoodyakv1/ref
+in the submission package to NIST 
+https://csrc.nist.gov/Projects/lightweight-cryptography/round-2-candidates
+
+d. Non-default values of generics and constants
+constant roundsPerCycle : integer := 6;
+
+e. Block sizes
+AD block size = 352 bits
+Plaintext/Ciphertext block size = 192 bits
+
+f. Execution times
+Execution time of authenticated encryption:
+16 + 2 + max(1,11*Na+Ina*ceil(Bla/4)) + (3+2)*(max(1,Na+Ina)) + 6*Nm + Inm*ceil(Blm/4) + (3+2)*(max(1,Nm+Inm)) + 6 + 2
+
+Execution time of authenticated decryption:
+16 + 2 + max(1,11*Na+Ina*ceil(Bla/4)) + (3+2)*(max(1,Na+Ina)) + 6*Nc + Inc*ceil(Blc/4) + (3+2)*(max(1,Nc+Inc)) + 6 + 2 + 1
+
+g. Latencies
+Latency of authenticated encryption:
+2 + 2
+
+Latency of authenticated decryption:
+2 + 2
+
+h. Difference between execution times for a new key and the same key
+0
+
+
+-----------------------------------------------------------------------------------------------------------------
+v6: xoodyak_without_hash_12R_per_Cycle
+
+a. Design goal:
+Support for authenticated encryption and decryption (no hashing).
+Unrolled, providing trade-off between throughput and area.
+No BRAMs, no DSP units.
+
+b. Supported maximum sizes of inputs: 
+2^{50}-1
+
+c. Reference software implementation: 
+/xoodyak/Implementations/crypto_aead/xoodyakv1/ref
+in the submission package to NIST 
+https://csrc.nist.gov/Projects/lightweight-cryptography/round-2-candidates
+
+d. Non-default values of generics and constants
+constant roundsPerCycle : integer := 12;
+
+e. Block sizes
+AD block size = 352 bits
+Plaintext/Ciphertext block size = 192 bits
+
+f. Execution times
+Execution time of authenticated encryption:
+16 + 1 + max(1,11*Na+Ina*ceil(Bla/4)) + (3+1)*(max(1,Na+Ina)) + 6*Nm + Inm*ceil(Blm/4) + (3+1)*(max(1,Nm+Inm)) + 6 + 1
+
+Execution time of authenticated decryption:
+16 + 1 + max(1,11*Na+Ina*ceil(Bla/4)) + (3+1)*(max(1,Na+Ina)) + 6*Nc + Inc*ceil(Blc/4) + (3+1)*(max(1,Nc+Inc)) + 6 + 1 + 1
+
+g. Latencies
+Latency of authenticated encryption:
+2 + 1
+
+Latency of authenticated decryption:
+2 + 1
 
 h. Difference between execution times for a new key and the same key
 0

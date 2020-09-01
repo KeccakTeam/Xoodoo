@@ -3,10 +3,10 @@ design_pkg.vhd
 xoodoo_globals.vhd
 LWC/NIST_LWAPI_pkg.vhd
 xoodoo_rc.vhd
-Lxoodoo_round.vhd
+xoodoo_round.vhd
 xoodoo_register.vhd
 xoodoo_n_rounds.vhd
-xoodoo_1rnd.vhd
+xoodoo.vhd
 CryptoCore.vhd
 LWC/StepDownCountLd.vhd
 LWC/key_piso.vhd

@@ -377,20 +377,20 @@ FSM_32BIT: if (W=32) generate
 
             -- Plaintext or Ciphertext
             when S_HDR_MSG=>
-                if (pdi_valid = '1' and cmd_ready = '1' ) then
+                if (pdi_valid = '1' and cmd_ready = '1') then
                     received_wrong_header <= (pdi_opcode /= HDR_PT and pdi_opcode /= HDR_CT);
-                        if (pdi_seg_length = x"0000" and eot_flag = '1') then
-                            if (decrypt_internal = '1') then
-                                nx_state <= S_HDR_TAG;
-                            else
-                                nx_state <= S_INT_MODE;
-                            end if;
+                    if (pdi_seg_length = x"0000" and eot_flag = '1') then
+                        if (decrypt_internal = '1') then
+                            nx_state <= S_HDR_TAG;
                         else
-                            nx_state <= S_LD_MSG;
+                            nx_state <= S_INT_MODE;
                         end if;
                     else
-                        nx_state <= S_HDR_MSG;
+                        nx_state <= S_LD_MSG;
                     end if;
+                else
+                    nx_state <= S_HDR_MSG;
+                end if;
 
             when S_LD_MSG =>
                 if (pdi_valid = '1' and bdi_ready_p = '1' and last_flit_of_segment = '1') then
