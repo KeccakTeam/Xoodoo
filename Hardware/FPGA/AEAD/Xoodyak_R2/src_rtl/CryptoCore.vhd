@@ -777,11 +777,9 @@ begin
     ----------------------------------------------------------------------------
     --! Word, Byte and Block counters
     ----------------------------------------------------------------------------
-    p_counters : process(clk,rst)
+    p_counters : process(clk)
     begin
-        if (rst = '1') then
-            word_cnt_s      <= 0;
-        elsif rising_edge(clk) then
+        if rising_edge(clk) then
                 case state_s is
                     -- Nothing to do here, reset counters
                     when IDLE =>
