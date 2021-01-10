@@ -300,7 +300,7 @@ begin
     ----------------------------------------------------------------------------
     --! Next_state FSM
     ----------------------------------------------------------------------------
-    p_next_state : process(state_s, key_valid, key_ready_s, key_update, bdi_valid,
+    p_next_state : process(state_s, key_valid, key_ready_s, key_update, bdi_valid, hash_in,
                              bdi_ready_s, bdi_eot, bdi_eoi, eoi_s, bdi_type, bdi_pad_loc_s,
                              word_cnt_s,
                              decrypt_s, bdo_valid_s, bdo_ready,
