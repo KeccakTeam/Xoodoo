@@ -24,6 +24,8 @@ package Design_pkg is
 --------------------------------------------------------------------------------
 ------------------------- DO NOT CHANGE ANYTHING BELOW -------------------------
 --------------------------------------------------------------------------------
+    -- asynchronous reset active high
+    constant active_rst_p : std_logic := '1';
 
     --! design parameters needed by the PreProcessor, PostProcessor, and LWC; assigned in the package body below!
     
@@ -60,6 +62,7 @@ package Design_pkg is
     constant PADD_01          : std_logic_vector;-- 0x01;
     constant PADD_01_KEY      : std_logic_vector;-- 0x0100;
                                                                
+    --constant DOMAIN_ABSORB_HASH : std_logic_vector;                         
     constant DOMAIN_ZERO        : std_logic_vector; 
     constant DOMAIN_ABSORB_KEY  : std_logic_vector; 
     constant DOMAIN_ABSORB      : std_logic_vector; 
@@ -235,6 +238,7 @@ package body Design_pkg is
         return res;
     end function;
     
+    --constant DOMAIN_ABSORB_HASH : std_logic_vector(CCW-1 downto 0) := domain_word(X"01"); -- 0x00;
     constant DOMAIN_ZERO        : std_logic_vector(CCW-1 downto 0) := domain_word(X"00"); -- 0x00;
 	constant DOMAIN_ABSORB_KEY  : std_logic_vector(CCW-1 downto 0) := domain_word(X"02"); -- 0x02;
 	constant DOMAIN_ABSORB      : std_logic_vector(CCW-1 downto 0) := domain_word(X"03"); -- 0x03;

@@ -38,8 +38,12 @@ use work.NIST_LWAPI_pkg.all;
 use work.design_pkg.all;
 
 entity PostProcessor is
+	generic (
+		G_W          : integer;
+		G_ASYNC_RSTN : boolean	
+	);
 
-    Port (
+    port (
             clk             : in  std_logic;
             rst             : in  std_logic;
             --! Crypto Core ====================================================
@@ -47,17 +51,17 @@ entity PostProcessor is
             bdo_valid       : in  std_logic;
             bdo_ready       : out std_logic;
             end_of_block    : in  std_logic;
-            bdo_type        : in  std_logic_vector(3 downto 0); -- not used atm
+--            bdo_type        : in  std_logic_vector(3 downto 0); -- not used atm
             bdo_valid_bytes : in  std_logic_vector(CCWdiv8-1 downto 0);
             msg_auth        : in  std_logic;
             msg_auth_ready  : out std_logic;
             msg_auth_valid  : in  std_logic;
             ---! Header FIFO ===================================================
-            cmd             : in  std_logic_vector(W-1 downto 0);
+            cmd             : in  std_logic_vector(G_W-1 downto 0);
             cmd_valid       : in  std_logic;
             cmd_ready       : out std_logic;
             --! Data Output (do) ===============================================
-            do_data         : out std_logic_vector(W-1 downto 0);
+            do_data         : out std_logic_vector(G_W-1 downto 0);
             do_valid        : out std_logic;
             do_last         : out std_logic;
             do_ready        : in  std_logic
@@ -68,7 +72,7 @@ end PostProcessor;
 architecture PostProcessor of PostProcessor is
 
     --Signals
-    signal do_data_internal     : std_logic_vector(W-1 downto 0);
+    signal do_data_internal     : std_logic_vector(G_W-1 downto 0);
     signal do_valid_internal    : std_logic;
     signal bdo_cleared          : std_logic_vector(CCW-1 downto 0);
     signal len_SegLenCnt        : std_logic;
@@ -83,13 +87,17 @@ architecture PostProcessor of PostProcessor is
     signal eot, nx_eot          : std_logic;
 
     --Aliases
-    alias cmd_opcode            : std_logic_vector( 3 downto 0) is cmd(W-1 downto W-4);
-    alias cmd_seg_length        : std_logic_vector((W/2)-1 downto 0) is cmd((W/2)-1 downto  0);
+    alias cmd_opcode            : std_logic_vector( 3 downto 0) is cmd(G_W-1 downto G_W-4);
+    alias cmd_seg_length        : std_logic_vector((G_W/2)-1 downto 0) is cmd((G_W/2)-1 downto  0);
 
     --Constants
     constant HASHdiv8           : integer := HASH_VALUE_SIZE/8;
     constant TAGdiv8            : integer := TAG_SIZE/8;
-    constant zero_data          : std_logic_vector(W-1 downto 0):=(others=>'0');
+    constant zero_data          : std_logic_vector(G_W-1 downto 0) := (others=>'0');
+    
+	--! Default values for do_data bus
+    --! to avoid leaking intermeadiate values if do_valid = '0'.
+    constant do_data_defaults   : std_logic_vector(G_W-1 downto 0) := (others => '0');
 
     --State types for different I/O sizes
     --! State for W=SW=32
@@ -132,18 +140,18 @@ begin
     SegLen: entity work.StepDownCountLd(StepDownCountLd)
                 generic map(
                         N       =>  16,
-                        step    =>  Wdiv8
-                            )
+                        step    =>  G_W/8
+                )
                 port map
                         (
-                        clk     =>  clk ,
-                        len     =>  len_SegLenCnt,
-                        load    =>  load_SegLenCnt,
-                        ena     =>  en_SegLenCnt,
-                        count   =>  dout_SegLenCnt
+                        clk     => clk,
+                        len     => len_SegLenCnt,
+                        ena     => en_SegLenCnt,
+                        load    => load_SegLenCnt,
+                        count   => dout_SegLenCnt
                     );
 
-    last_flit_of_segment <= '1' when (to_integer(unsigned(dout_SegLenCnt))<= Wdiv8) else '0';
+    last_flit_of_segment <= '1' when (to_integer(to_01(unsigned(dout_SegLenCnt))) <= G_W/8) else '0';
 
     --! Registers
     -- state register depends on W and is set in the corresponding if generate
@@ -161,7 +169,7 @@ begin
    --! 32 bit specific FSM -------------------------------------------------------------------------------
    -- ====================================================================================================
 
-FSM_32BIT: if (W=32) generate
+FSM_32BIT: if (G_W=32) generate
 
     --! 32 Bit specific declarations
     alias do_data_internal_opcode   : std_logic_vector( 3 downto 0) is do_data_internal(31 downto 28);
@@ -182,34 +190,52 @@ FSM_32BIT: if (W=32) generate
 
     --! SIPO
     -- for ccw < W: a sipo is used for width conversion
-    bdoSIPO: entity work.data_sipo(behavioral) port map
-        (
-            clk=> clk,
-            rst=> rst,
-            -- no need for conversion, as our last serial_in element is also the
-            -- last parallel_out element
-            end_of_input  => end_of_block,
-            -- end_of_bock should only be evaluated if bdo_valid_p = '1'
-            data_s       => bdo_cleared,
-            data_valid_s => bdo_valid,
-            data_ready_s => bdo_ready,
-
-            data_p       => bdo_p,
-            data_valid_p => bdo_valid_p,
-            data_ready_p => bdo_ready_p
-        );
+    bdoSIPO: entity work.DATA_SIPO(behavioral)
+	    generic map(
+	    		G_ASYNC_RSTN => G_ASYNC_RSTN
+	    	)
+	    port map
+	        (
+	            clk          => clk,
+	            rst          => rst,
+	            
+	            -- no need for conversion, as our last serial_in element is also the
+	            -- last parallel_out element
+	            end_of_input => end_of_block,
+	            -- end_of_bock should only be evaluated if bdo_valid_p = '1'
+	
+	            data_p       => bdo_p,
+	            data_valid_p => bdo_valid_p,
+	            data_ready_p => bdo_ready_p,
+	            
+	            data_s       => bdo_cleared,
+	            data_valid_s => bdo_valid,
+	            data_ready_s => bdo_ready
+	        );
 
     --! State register
-    process (clk)
-    begin
-        if rising_edge(clk) then
-            if (rst = '1') then
+    GEN_proc_SYNC_RST: if (not G_ASYNC_RSTN) generate
+        process (clk)
+        begin
+            if rising_edge(clk) then
+                if(rst='1')  then
+                    pr_state <= S_INIT;
+                else
+                    pr_state <= nx_state;
+                end if;
+            end if;
+        end process;
+    end generate GEN_proc_SYNC_RST;
+    GEN_proc_ASYNC_RSTN: if (G_ASYNC_RSTN) generate
+        process (clk, rst)
+        begin
+            if(rst='0')  then
                 pr_state <= S_INIT;
-            else
+            elsif rising_edge(clk) then
                 pr_state <= nx_state;
             end if;
-        end if;
-    end process;
+        end process;
+    end generate GEN_proc_ASYNC_RSTN;
 
 
     --! Next state function
@@ -333,7 +359,7 @@ FSM_32BIT: if (W=32) generate
                 end if;
 
             when others=>
-                    nx_state <= pr_state;
+                nx_state <= pr_state;
         end case;
     end process;
 
@@ -461,9 +487,6 @@ FSM_32BIT: if (W=32) generate
                 do_data_internal_opcode       <= INST_SUCCESS;
                 do_data_internal(27 downto 0) <= (others=>'0');
 
-            when others=>
-                null;
-
         end case;
     end process;
 
@@ -475,12 +498,12 @@ end generate;
    --! 16 bit specific FSM -------------------------------------------------------------------------------
    -- ====================================================================================================
 
-FSM_16BIT: if (W=16) generate
+FSM_16BIT: if (G_W=16) generate
 
     --! 16 Bit specific declarations
     signal nx_state, pr_state : t_state16;
     signal HDR_TAG_internal     : std_logic_vector(31 downto 0);
-    signal data_seg_length      : std_logic_vector(W-1 downto 0);
+    signal data_seg_length      : std_logic_vector(G_W-1 downto 0);
     signal tag_size_bytes       : std_logic_vector(16  -1 downto 0);
     
     begin
@@ -488,32 +511,44 @@ FSM_16BIT: if (W=16) generate
     --! Logics
     data_seg_length  <= cmd;
     tag_size_bytes   <= std_logic_vector(to_unsigned(TAGdiv8, 16));
-    load_SegLenCnt   <= data_seg_length(W-1 downto W-8*Wdiv8);
+    load_SegLenCnt   <= data_seg_length(G_W-1 downto G_W-8*(G_W/8));
     HDR_TAG_internal <= HDR_TAG & x"300"& tag_size_bytes(15 downto 0);
     
     --! State register
-    process (clk)
-    begin
-        if rising_edge(clk) then
-            if (rst = '1') then
+    GEN_proc_SYNC_RST: if (not G_ASYNC_RSTN) generate
+        process (clk)
+        begin
+            if rising_edge(clk) then
+                if(rst='1')  then
+                    pr_state <= S_INIT;
+                else
+                    pr_state <= nx_state;
+                end if;
+            end if;
+        end process;
+    end generate GEN_proc_SYNC_RST;
+    GEN_proc_ASYNC_RSTN: if (G_ASYNC_RSTN) generate
+        process (clk, rst)
+        begin
+            if(rst='0')  then
                 pr_state <= S_INIT;
-            else
+            elsif rising_edge(clk) then
                 pr_state <= nx_state;
             end if;
-        end if;
-    end process;
+        end process;
+    end generate GEN_proc_ASYNC_RSTN;
+
 
     --! Next state function
     process (pr_state, bdo_valid, do_ready, end_of_block, decrypt,
-            cmd_valid, cmd, msg_auth_valid, msg_auth,  last_flit_of_segment,
-            eot, tag_size_bytes)
+            cmd_valid, cmd, msg_auth_valid, msg_auth,  last_flit_of_segment, eot)
 
     begin
         case pr_state is
 
             when S_INIT=>
                 if (cmd_valid='1') then
-                    if (cmd(W-1 downto W-4) = INST_HASH) then
+                    if (cmd(G_W-1 downto G_W-4) = INST_HASH) then
                         nx_state <= S_HDR_HASH;
                     else
                         nx_state <= S_HDR_MSG;
@@ -660,7 +695,7 @@ FSM_16BIT: if (W=16) generate
 
             when S_INIT=>
                 if (cmd_valid = '1') then
-                    nx_decrypt <= cmd(W-4);
+                    nx_decrypt <= cmd(G_W-4);
                 end if;
                 cmd_ready <= '1';
                 nx_eot    <= '0';
@@ -668,15 +703,15 @@ FSM_16BIT: if (W=16) generate
             --HASH
             when S_HDR_HASH =>
                 do_valid_internal                <= '1';
-                do_data_internal(W-1 downto W-4) <= HDR_HASH_VALUE;
-                do_data_internal(W-5 downto W-7) <= "001";
-                do_data_internal(W-8)            <= '1';
-                do_data_internal(W-9 downto 0)   <= x"00";
+                do_data_internal(G_W-1 downto G_W-4) <= HDR_HASH_VALUE;
+                do_data_internal(G_W-5 downto G_W-7) <= "001";
+                do_data_internal(G_W-8)            <= '1';
+                do_data_internal(G_W-9 downto 0)   <= (others => '0');
 
 
             when S_HDR_HASHLEN =>
                 do_valid_internal <='1';
-                do_data_internal  <= std_logic_vector(to_unsigned(HASHdiv8, 16));
+                do_data_internal  <= std_logic_vector(to_unsigned(HASHdiv8, G_W));
 
             when S_OUT_HASH =>
                 bdo_ready         <= do_ready;
@@ -688,22 +723,22 @@ FSM_16BIT: if (W=16) generate
                 cmd_ready         <= do_ready;
                 do_valid_internal <= cmd_valid;
                 len_SegLenCnt     <= do_ready and cmd_valid;
-                nx_eot            <= cmd(W-7);
+                nx_eot            <= cmd(G_W-7);
 
                 if (decrypt='1') then
                     --header is msg
-                    do_data_internal(W-1 downto W-4) <= HDR_PT;
-                    do_data_internal(W-8)            <= '1' and cmd(W-7);
+                    do_data_internal(G_W-1 downto G_W-4) <= HDR_PT;
+                    do_data_internal(G_W-8)            <= '1' and cmd(G_W-7);
                 else
                     ---header is ciphertext
-                    do_data_internal(W-1 downto W-4) <= HDR_CT;
-                    do_data_internal(W-8)            <= '0';
+                    do_data_internal(G_W-1 downto G_W-4) <= HDR_CT;
+                    do_data_internal(G_W-8)            <= '0';
                 end if;
 
-                do_data_internal(W-5)                  <= '0';
-                do_data_internal(W-6)                  <= '0';
-                do_data_internal(W-7)                  <= cmd(W-7);
-                do_data_internal(W-1-Wdiv8*4 downto 0) <= cmd(W-1-Wdiv8*4 downto 0);
+                do_data_internal(G_W-5)                  <= '0';
+                do_data_internal(G_W-6)                  <= '0';
+                do_data_internal(G_W-7)                  <= cmd(G_W-7);
+                do_data_internal(G_W-1-(G_W/8)*4 downto 0) <= cmd(G_W-1-(G_W/8)*4 downto 0);
 
             when S_HDR_MSGLEN =>
                 cmd_ready          <= do_ready;
@@ -720,11 +755,11 @@ FSM_16BIT: if (W=16) generate
             --TAG
             when S_HDR_TAG =>
                 do_valid_internal                      <='1';
-                do_data_internal(W-1 downto 0)         <= HDR_TAG_internal(31 downto 32-W);
+                do_data_internal(G_W-1 downto 0)         <= HDR_TAG_internal(31 downto 32-G_W);
 
             when S_HDR_TAGLEN =>
                 do_valid_internal                      <='1';
-                do_data_internal(W-1 downto W-Wdiv8*8) <= tag_size_bytes(W-1 downto W-Wdiv8*8);
+                do_data_internal(G_W-1 downto G_W-(G_W/8)*8) <= tag_size_bytes(G_W-1 downto G_W-(G_W/8)*8);
 
             when S_OUT_TAG =>
                 bdo_ready         <= do_ready;
@@ -737,18 +772,14 @@ FSM_16BIT: if (W=16) generate
             when S_STATUS_FAIL =>
                 do_valid_internal                <= '1';
                 do_last                          <= '1';
-                do_data_internal(W-1 downto W-4) <="1111";
-                do_data_internal(W-5 downto 0)   <= (others=>'0');
+                do_data_internal(G_W-1 downto G_W-4) <="1111";
+                do_data_internal(G_W-5 downto 0)   <= (others=>'0');
 
             when S_STATUS_SUCCESS =>
                 do_valid_internal                <= '1';
                 do_last                          <= '1';
-                do_data_internal(W-1 downto W-4) <="1110";
-                do_data_internal(W-5 downto 0)   <= (others=>'0');
-
-
-            when others=>
-                null;
+                do_data_internal(G_W-1 downto G_W-4) <="1110";
+                do_data_internal(G_W-5 downto 0)   <= (others=>'0');
 
         end case;
     end process;
@@ -761,11 +792,11 @@ end generate;
    --!  8 bit specific FSM -------------------------------------------------------------------------------
    -- ====================================================================================================
 
-FSM_8BIT: if (W=8) generate
+FSM_8BIT: if (G_W=8) generate
 
     --! 8 Bit specific declarations
     signal HDR_TAG_internal     : std_logic_vector(31 downto 0);
-    signal data_seg_length      : std_logic_vector(W-1 downto 0);
+    signal data_seg_length      : std_logic_vector(G_W-1 downto 0);
     signal tag_size_bytes       : std_logic_vector(16  -1 downto 0);
     signal do_data_t16          : std_logic_vector(16  -1 downto 0);
     --Registers
@@ -778,7 +809,7 @@ FSM_8BIT: if (W=8) generate
     --! Logics
     data_seg_length  <= cmd;
     tag_size_bytes   <= std_logic_vector(to_unsigned(TAGdiv8, 16));
-    load_SegLenCnt   <= dout_LenReg(7 downto 0) & data_seg_length(W-1 downto W-8);
+    load_SegLenCnt   <= dout_LenReg(7 downto 0) & data_seg_length(G_W-1 downto G_W-8);
     do_data_t16      <= std_logic_vector(to_unsigned(HASHdiv8, 16));
     HDR_TAG_internal <= HDR_TAG & x"300"& tag_size_bytes(15 downto 0);
 
@@ -791,16 +822,28 @@ FSM_8BIT: if (W=8) generate
     end process;
     
    --! State register
-    process (clk)
-    begin
-        if rising_edge(clk) then
-            if (rst = '1') then
+   GEN_proc_SYNC_RST: if (not G_ASYNC_RSTN) generate
+        process (clk)
+        begin
+            if rising_edge(clk) then
+                if(rst='1')  then
+                    pr_state <= S_INIT;
+                else
+                    pr_state <= nx_state;
+                end if;
+            end if;
+        end process;
+    end generate GEN_proc_SYNC_RST;
+    GEN_proc_ASYNC_RSTN: if (G_ASYNC_RSTN) generate
+        process (clk, rst)
+        begin
+            if(rst='0')  then
                 pr_state <= S_INIT;
-            else
+            elsif rising_edge(clk) then
                 pr_state <= nx_state;
             end if;
-        end if;
-    end process;
+        end process;
+    end generate GEN_proc_ASYNC_RSTN;
 
     --! Next state function
     process (pr_state, bdo_valid, do_ready, end_of_block, decrypt,
@@ -813,7 +856,7 @@ FSM_8BIT: if (W=8) generate
 
             when S_INIT=>
                 if (cmd_valid='1') then
-                    if (cmd(W-1 downto W-4) = INST_HASH) then
+                    if (cmd(G_W-1 downto G_W-4) = INST_HASH) then
                         nx_state <= S_HDR_HASH;
                     else
                         nx_state <= S_HDR_MSG;
@@ -1004,7 +1047,7 @@ FSM_8BIT: if (W=8) generate
 
             when S_INIT =>
                 if (cmd_valid = '1') then
-                    nx_decrypt <= cmd(W-4);
+                    nx_decrypt <= cmd(G_W-4);
                 end if;
                 cmd_ready <= '1';
                 nx_eot    <= '0';
@@ -1012,13 +1055,13 @@ FSM_8BIT: if (W=8) generate
             --HASH
             when S_HDR_HASH =>
                 do_valid_internal                <= '1';
-                do_data_internal(W-1 downto W-4) <= HDR_HASH_VALUE;
-                do_data_internal(W-5 downto W-7) <= "001";
-                do_data_internal(W-8)            <= '1';
+                do_data_internal(G_W-1 downto G_W-4) <= HDR_HASH_VALUE;
+                do_data_internal(G_W-5 downto G_W-7) <= "001";
+                do_data_internal(G_W-8)            <= '1';
 
             when S_HDR_RESHASH =>
                 do_valid_internal  <= '1';
-                do_data_internal   <= x"00";
+                do_data_internal   <= (others => '0');
 
             when S_HDR_HASHLEN_MSB =>
                 do_valid_internal  <= '1';
@@ -1038,19 +1081,19 @@ FSM_8BIT: if (W=8) generate
                 cmd_ready          <= do_ready;
                 do_valid_internal  <= cmd_valid;
                 len_SegLenCnt      <= do_ready and cmd_valid;
-                nx_eot             <= cmd(W-7);
+                nx_eot             <= cmd(G_W-7);
                 if(decrypt='1') then
                     --header is msg
-                    do_data_internal(W-1 downto W-4) <= HDR_PT;
-                    do_data_internal(W-8)            <= '1' and cmd(W-7);
+                    do_data_internal(G_W-1 downto G_W-4) <= HDR_PT;
+                    do_data_internal(G_W-8)            <= '1' and cmd(G_W-7);
                 else
                     ---header is ciphertext
-                    do_data_internal(W-1 downto W-4) <= HDR_CT;
-                    do_data_internal(W-8)            <= '0';
+                    do_data_internal(G_W-1 downto G_W-4) <= HDR_CT;
+                    do_data_internal(G_W-8)            <= '0';
                  end if;
-                do_data_internal(W-5) <= '0';
-                do_data_internal(W-6) <= '0';
-                do_data_internal(W-7) <= cmd(W-7);
+                do_data_internal(G_W-5) <= '0';
+                do_data_internal(G_W-6) <= '0';
+                do_data_internal(G_W-7) <= cmd(G_W-7);
 
             when S_HDR_RESMSG =>
                 cmd_ready         <= do_ready;
@@ -1060,7 +1103,7 @@ FSM_8BIT: if (W=8) generate
             when S_HDR_MSGLEN_MSB =>
                 cmd_ready         <= do_ready;
                 if ((do_ready = '1') and (cmd_valid = '1')) then
-                    nx_dout_LenReg  <= data_seg_length(W-1 downto W-8);
+                    nx_dout_LenReg  <= data_seg_length(G_W-1 downto G_W-8);
                 end if;
                 do_valid_internal <= cmd_valid;
                 do_data_internal  <= cmd;
@@ -1080,7 +1123,7 @@ FSM_8BIT: if (W=8) generate
             --TAG
             when S_HDR_TAG =>
                 do_valid_internal                <='1';
-                do_data_internal(W-1 downto 0)   <= HDR_TAG_internal(31 downto 32-W);
+                do_data_internal(G_W-1 downto 0)   <= HDR_TAG_internal(31 downto 32-G_W);
 
             when S_HDR_RESTAG =>
                 do_valid_internal <='1';
@@ -1088,11 +1131,11 @@ FSM_8BIT: if (W=8) generate
 
             when S_HDR_TAGLEN_MSB =>
                 do_valid_internal                <='1';
-                do_data_internal(W-1 downto W-8) <= tag_size_bytes(15 downto 8);
+                do_data_internal(G_W-1 downto G_W-8) <= tag_size_bytes(15 downto 8);
 
             when S_HDR_TAGLEN_LSB =>
                 do_valid_internal                <='1';
-                do_data_internal(W-1 downto W-8) <= tag_size_bytes(7 downto 0);
+                do_data_internal(G_W-1 downto G_W-8) <= tag_size_bytes(7 downto 0);
 
             when S_OUT_TAG =>
                 bdo_ready         <= do_ready;
@@ -1105,17 +1148,14 @@ FSM_8BIT: if (W=8) generate
             when S_STATUS_FAIL =>
                 do_valid_internal                <= '1';
                 do_last                          <= '1';
-                do_data_internal(W-1 downto W-4) <="1111";
-                do_data_internal(W-5 downto 0)   <= (others=>'0');
+                do_data_internal(G_W-1 downto G_W-4) <="1111";
+                do_data_internal(G_W-5 downto 0)   <= (others=>'0');
 
             when S_STATUS_SUCCESS =>
                 do_valid_internal                <= '1';
                 do_last                          <= '1';
-                do_data_internal(W-1 downto W-4) <="1110";
-                do_data_internal(W-5 downto 0)   <= (others=>'0');
-
-            when others=>
-                 null;
+                do_data_internal(G_W-1 downto G_W-4) <="1110";
+                do_data_internal(G_W-5 downto 0)   <= (others=>'0');
 
         end case;
     end process;

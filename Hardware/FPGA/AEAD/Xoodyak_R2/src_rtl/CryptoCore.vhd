@@ -70,19 +70,16 @@ architecture behavioral of CryptoCore is
             word_in         : in std_logic_vector(31 downto 0);
             word_index_in   : in integer range 0 to 11;
             word_enable_in  : in std_logic;
-            domain_i          : in std_logic_vector(31 downto 0);
-            domain_enable_i   : in std_logic;
+            domain_i        : in std_logic_vector(31 downto 0);
+            domain_enable_i : in std_logic;
             word_out        : out std_logic_vector(31 downto 0)
             );
     end component;
 
-    --! Constant to check for empty hash
-    constant EMPTY_HASH_SIZE_C  : std_logic_vector(2 downto 0)  := (others => '0');
-
     -- Number of words the respective blocks contain.
     constant STATE_WORDS_C      : integer   := get_words(STATE_SIZE, CCW);
     constant NPUB_WORDS_C       : integer   := get_words(NPUB_SIZE, CCW);
-    constant HASH_WORDS_C       : integer   := get_words(HASH_VALUE_SIZE, CCW);
+    --constant HASH_WORDS_C       : integer   := get_words(HASH_VALUE_SIZE, CCW);
     constant BLOCK_WORDS_C      : integer   := get_words(DBLK_SIZE, CCW);
     constant RKIN_WORDS_C       : integer   := get_words(RKIN, CCW);
     constant RKOUT_WORDS_C      : integer   := get_words(RKOUT, CCW);
@@ -93,32 +90,22 @@ architecture behavioral of CryptoCore is
     type state_t is (IDLE,
                     STORE_KEY,
                     PADD_KEY,
-                    PRE_ABSORB_NONCE,
                     ABSORB_NONCE,
                     PADD_NONCE,
-                    RUN_XOODOO,
-                    PRE_ABSORB_AD,
                     ABSORB_AD,
                     PADD_AD,
                     PADD_AD_ONLY_DOMAIN,
                     PADD_AD_BLOCK,
-                    PRE_ABSORB_MSG,
                     ABSORB_MSG,
                     PADD_MSG,
                     PADD_MSG_ONLY_DOMAIN,
                     PADD_MSG_BLOCK,
-                    PRE_EXTRACT_TAG,
                     EXTRACT_TAG,
                     VERIFY_TAG,
-                    WAIT_ACK,
-                    INIT_HASH,
-                    ABSORB_HASH_MSG,
-                    PADD_HASH_MSG,
-                    EXTRACT_HASH_VALUE);
-    -- FSM signals                
+                    WAIT_ACK);
+
+    -- FSM signals
     signal n_state_s, state_s : state_t;
-    -- Signals that store the next state after xoodoo permutation
-    signal n_next_state_s, next_state_s : state_t;
 
     -- Word counter for address generation. Increases every time a word is transferred.
     signal word_cnt_s                   : integer range 0 to STATE_WORDS_C - 1;
@@ -142,8 +129,6 @@ architecture behavioral of CryptoCore is
     -- Internal flags
     signal bdi_partial_s                  : std_logic;
     signal n_decrypt_s, decrypt_s         : std_logic;
-    signal n_hash_s, hash_s               : std_logic;
-    signal n_empty_hash_s, empty_hash_s   : std_logic;
     signal n_msg_auth_s, msg_auth_s       : std_logic;
     signal n_eoi_s, eoi_s                 : std_logic;
     signal n_update_key_s, update_key_s   : std_logic;
@@ -158,7 +143,7 @@ architecture behavioral of CryptoCore is
     signal init_reg_s       : std_logic;
     signal padd_s           : std_logic_vector(31 downto 0);
     signal padd_enable_s    : std_logic;
-    signal xoodoo_state_word_s       : std_logic_vector(31 downto 0);
+    signal xoodoo_state_word_s : std_logic_vector(31 downto 0);
 
     -- Xoodyak signals
     signal domain_s, n_domain_s : std_logic_vector(CCW-1 downto 0);
@@ -234,14 +219,20 @@ begin
     p_bdo_mux : process(state_s, bdi_s, word_cnt_s,
                         bdi_valid_bytes_s, bdi_valid, bdi_eot, decrypt_s,
                         xoodoo_state_word_s,
-                        hash_s,  
-                        bdi_ready_s)
+                        bdi_ready_s, xoodoo_valid_s, xoodoo_start_s)
     begin
+        -- Default values preventing latches
+        bdo_s               <= (others => '0');
+        bdo_valid_bytes_s   <= '1'&(CCWdiv8 - 2 downto 0 => '0');
+        bdo_valid_s         <= '0';
+        end_of_block_s      <= '0';
+        bdo_type_s          <= HDR_TAG;
+
         case state_s is
             -- Connect bdo signals and encryp/decrypt data.
             -- Set bdo_type depending on mode.
             when ABSORB_MSG =>
-
+                if(xoodoo_valid_s = '1' and xoodoo_start_s = '0') then
                 bdo_s               <= bdi_s xor xoodoo_state_word_s;
                 bdo_valid_bytes_s   <= bdi_valid_bytes_s;
                 bdo_valid_s         <= bdi_valid and bdi_ready_s;
@@ -251,23 +242,20 @@ begin
                 else
                     bdo_type_s <= HDR_CT;
                 end if;
+                end if;
 
-            -- Set end_of_block_s on either the last word of the tag block
-            -- or the hash_value block.
-            when EXTRACT_TAG | EXTRACT_HASH_VALUE =>
+            -- Set end_of_block_s on the last word of the tag block
+            when EXTRACT_TAG =>
+                if(xoodoo_valid_s = '1' and xoodoo_start_s = '0') then
                 bdo_s               <= xoodoo_state_word_s;
                 bdo_valid_bytes_s   <= (others => '1');
                 bdo_valid_s         <= '1';
-                if (hash_s = '1') then
-                    bdo_type_s <= HDR_HASH_VALUE;
-                else
                     bdo_type_s <= HDR_TAG;
-                end if;
-                if (word_cnt_s = TAG_WORDS_C - 1 and hash_s = '0')
-                or (word_cnt_s >= HASH_WORDS_C - 1 and hash_s = '1') then
+                    if (word_cnt_s = TAG_WORDS_C - 1) then
                     end_of_block_s <= '1';
                 else
                     end_of_block_s <= '0';
+                end if;
                 end if;
 
             -- Default values.
@@ -287,15 +275,12 @@ begin
     p_reg : process(clk)
     begin
         if rising_edge(clk) then
-            if (rst = '1') then
+            if (rst = active_rst_p) then
                 msg_auth_s            <= '1';
                 eoi_s                 <= '0';
                 update_key_s          <= '0';
                 decrypt_s             <= '0';
-                hash_s                <= '0';
-                empty_hash_s          <= '0';
                 state_s               <= IDLE;
-                next_state_s          <= IDLE;
                 first_block_s         <= '1';
                 domain_s              <= (others=>'0');
                 xoodoo_start_s        <= '0';
@@ -304,10 +289,7 @@ begin
                 eoi_s                 <= n_eoi_s;
                 update_key_s          <= n_update_key_s;
                 decrypt_s             <= n_decrypt_s;
-                hash_s                <= n_hash_s;
-                empty_hash_s          <= n_empty_hash_s;
                 state_s               <= n_state_s;
-                next_state_s          <= n_next_state_s;
                 first_block_s         <= n_first_block_s;
                 domain_s              <= n_domain_s;
                 xoodoo_start_s        <= n_xoodoo_start_s;
@@ -318,15 +300,16 @@ begin
     ----------------------------------------------------------------------------
     --! Next_state FSM
     ----------------------------------------------------------------------------
-    p_next_state : process(state_s, next_state_s, key_valid, key_ready_s, key_update, bdi_valid,
+    p_next_state : process(state_s, key_valid, key_ready_s, key_update, bdi_valid,
                              bdi_ready_s, bdi_eot, bdi_eoi, eoi_s, bdi_type, bdi_pad_loc_s,
-                             word_cnt_s, hash_in, decrypt_s, bdo_valid_s, bdo_ready,
+                             word_cnt_s,
+                             decrypt_s, bdo_valid_s, bdo_ready,
                              msg_auth_valid_s, msg_auth_ready, bdi_partial_s, xoodoo_valid_s,
-                             xoodoo_start_s)
+                             xoodoo_start_s, first_block_s)
 
     begin
         -- Default values preventing latches
-        n_next_state_s <= next_state_s;
+        n_state_s <= state_s;
 
         case state_s is
             -- Wakeup as soon as valid bdi or key is signaled.
@@ -340,23 +323,6 @@ begin
                 else
                     n_state_s <= IDLE;
                 end if;
-                n_next_state_s <= IDLE;
-                
-
-            -- Initialize hash with zero so we don't need padding after receiving
-            -- non-full hash_msg block. Additionally no distinction between empty
-            -- hash or regular hash is required when extracting hash from ram.
-            when INIT_HASH =>
-                if (word_cnt_s >= HASH_WORDS_C - 1) then
-                    if (eoi_s = '1') then
-                        n_state_s <= EXTRACT_HASH_VALUE;
-                    else
-                        n_state_s <= ABSORB_HASH_MSG;
-                    end if;
-                else
-                    n_state_s <= INIT_HASH;
-                end if;
-                
 
             -- Wait until the new key is completely received.
             -- It is assumed, that key is only updated if Npub follows. Otherwise
@@ -371,41 +337,21 @@ begin
                 end if;
 
             when PADD_KEY =>
-                n_state_s <= PRE_ABSORB_NONCE;
-
-            when PRE_ABSORB_NONCE =>
-                n_state_s <= RUN_XOODOO;
-                n_next_state_s <= ABSORB_NONCE;
+                n_state_s <= ABSORB_NONCE;
 
             -- Wait until the whole nonce block is received. If no npub
             -- follows, directly go to extracting/verifying tag.
             when ABSORB_NONCE =>
-                if (bdi_valid = '1' and bdi_ready_s = '1' and word_cnt_s >= NPUB_WORDS_C - 1) then
-                    n_next_state_s <= PRE_ABSORB_AD;
-                    n_state_s <= PADD_NONCE;
-                else
-                    n_state_s <= ABSORB_NONCE;
+                if(xoodoo_valid_s = '1' and xoodoo_start_s = '0') then
+                    if (bdi_valid = '1' and bdi_ready_s = '1' and word_cnt_s >= NPUB_WORDS_C - 1) then
+                        n_state_s <= PADD_NONCE;
+                    else
+                        n_state_s <= ABSORB_NONCE;
+                    end if;
                 end if;
 
             when PADD_NONCE =>
-                n_state_s <= next_state_s;
-                
-
-            when PRE_ABSORB_AD =>
-                if (eoi_s = '1') then -- empty ad and empty msg
-                    n_next_state_s <= PADD_AD;
-                else
-                    n_next_state_s <= ABSORB_AD; -- non-empty ad
-                end if;
-                n_state_s <= RUN_XOODOO;
-                
-
-            when RUN_XOODOO =>
-                if(xoodoo_valid_s = '1' and xoodoo_start_s = '0') then
-                    n_state_s <= next_state_s;
-                else
-                    n_state_s <= RUN_XOODOO;
-                end if;
+                n_state_s <= ABSORB_AD;
 
             -- In case input is plaintext or ciphertext, no ad is processed.
             -- Wait until last word of AD is signaled. If padding is required
@@ -413,20 +359,28 @@ begin
             -- in last word yet (bdi_partial_s = '0') go to padding state, else
             -- either go to absorb msg or directly aborb length depending on presence of msg data.
             when ABSORB_AD =>
-                if (bdi_valid = '1' and (bdi_type = HDR_PT or bdi_type = HDR_CT)) then
-                    n_state_s <= PADD_AD;
-                elsif (bdi_valid = '1' and bdi_ready_s = '1' and bdi_eot = '1') then
-                    if (word_cnt_s < RKIN_WORDS_C) then
-                        if (bdi_partial_s = '0') then -- 10 has not been added in last word
-                            n_state_s <= PADD_AD; -- padd is done in the new word
-                        else
-                            n_state_s <= PADD_AD_ONLY_DOMAIN;
-                        end if;
-                    else
+                if(xoodoo_valid_s = '1' and xoodoo_start_s = '0') then
+                    if (eoi_s = '1') then -- empty ad and empty msg
                         n_state_s <= PADD_AD;
+                    else
+                        if (bdi_valid = '1' and (bdi_type = HDR_PT or bdi_type = HDR_CT)) then
+                            n_state_s <= PADD_AD;
+                        elsif (bdi_valid = '1' and bdi_ready_s = '1' and bdi_eot = '1') then
+                            if (word_cnt_s < RKIN_WORDS_C) then
+                                if (bdi_partial_s = '0') then -- 10 has not been added in last word
+                                    n_state_s <= PADD_AD; -- padd is done in the new word
+                                else
+                                    n_state_s <= PADD_AD_ONLY_DOMAIN;
+                                end if;
+                            else
+                                n_state_s <= PADD_AD;
+                            end if;
+                        elsif (bdi_valid = '1' and bdi_ready_s = '1' and word_cnt_s >= RKIN_WORDS_C - 1) then
+                            n_state_s <= PADD_AD_BLOCK; -- this then calls xoodoo
+                        else
+                            n_state_s <= ABSORB_AD;
+                        end if;
                     end if;
-                elsif (bdi_valid = '1' and bdi_ready_s = '1' and word_cnt_s >= RKIN_WORDS_C - 1) then
-                    n_state_s <= PADD_AD_BLOCK; -- this then calls xoodoo
                 else
                     n_state_s <= ABSORB_AD;
                 end if;
@@ -435,82 +389,75 @@ begin
             -- go to absorb msg state or directly absorb length depending on the
             -- presence of msg data.
             when PADD_AD =>
-                n_state_s <= PRE_ABSORB_MSG;
+                if (eoi_s = '1') then -- empty msg
+                    n_state_s <= PADD_MSG;
+                else
+                    n_state_s <= ABSORB_MSG;
+                end if;
 
             when PADD_AD_ONLY_DOMAIN =>
-                n_state_s <= PRE_ABSORB_MSG;
+                if (eoi_s = '1') then -- empty msg
+                    n_state_s <= PADD_MSG;
+                else
+                    n_state_s <= ABSORB_MSG;
+                end if;
 
             when PADD_AD_BLOCK =>
-                n_state_s <= PRE_ABSORB_AD;
-
-            when PRE_ABSORB_MSG =>
-                if (eoi_s = '1') then -- empty msg
-                    n_next_state_s <= PADD_MSG;
-                else
-                    n_next_state_s <= ABSORB_MSG;
-                end if;
-                n_state_s <= RUN_XOODOO;
+                n_state_s <= ABSORB_AD;
 
             -- Read in either plaintext or ciphertext until end of type is
             -- detected. Then check whether padding is necessary or not as previously.
             when ABSORB_MSG =>
-                if (bdi_valid = '1' and bdi_ready_s = '1' and bdi_eot = '1') then
-                    if (word_cnt_s < RKOUT_WORDS_C) then
-                        if (bdi_partial_s = '0') then -- 10 has not been added in last word
-                            n_state_s <= PADD_MSG; -- padd is done in the new word
+                if(xoodoo_valid_s = '1' and xoodoo_start_s = '0') then
+                    if (bdi_valid = '1' and bdi_ready_s = '1' and bdi_eot = '1') then
+                        if (word_cnt_s < RKOUT_WORDS_C) then
+                            if (bdi_partial_s = '0') then -- 10 has not been added in last word
+                                n_state_s <= PADD_MSG; -- padd is done in the new word
+                            else
+                                n_state_s <= PADD_MSG_ONLY_DOMAIN;
+                            end if;
                         else
-                            n_state_s <= PADD_MSG_ONLY_DOMAIN;
+                            n_state_s <= PADD_MSG;
                         end if;
+                    elsif (bdi_valid = '1' and bdi_ready_s = '1' and word_cnt_s >= RKOUT_WORDS_C - 1) then
+                        n_state_s <= PADD_MSG_BLOCK; -- this then calls xoodoo
                     else
-                        n_state_s <= PADD_MSG;
+                        n_state_s <= ABSORB_MSG;
                     end if;
-                elsif (bdi_valid = '1' and bdi_ready_s = '1' and word_cnt_s >= RKOUT_WORDS_C - 1) then
-                    n_state_s <= PADD_MSG_BLOCK; -- this then calls xoodoo
                 else
                     n_state_s <= ABSORB_MSG;
                 end if;
 
             when PADD_MSG =>
-                n_state_s <= PRE_EXTRACT_TAG;
-
-            when PADD_MSG_ONLY_DOMAIN =>
-                n_state_s <= PRE_EXTRACT_TAG;
-
-            when PADD_MSG_BLOCK =>
-                n_state_s <= PRE_ABSORB_MSG;
-                n_next_state_s <= ABSORB_MSG;
-
-
-            -- Wait for end of hash_value. Decide whether extra padding state is
-            -- required or directly go to extracting hash_value state.
-            when ABSORB_HASH_MSG =>
-                if (bdi_valid = '1' and bdi_ready_s = '1' and bdi_eoi = '1') then
-                   if (word_cnt_s < HASH_WORDS_C - 1 and bdi_partial_s = '0') then
-                        n_state_s <= PADD_HASH_MSG;
+                if(xoodoo_valid_s = '1' and xoodoo_start_s = '0') then
+                    if (decrypt_s = '1') then
+                        n_state_s <= VERIFY_TAG;
                     else
-                        n_state_s <= EXTRACT_HASH_VALUE;
+                        n_state_s <= EXTRACT_TAG;
                     end if;
                 else
-                    n_state_s <= ABSORB_HASH_MSG;
+                    n_state_s <= PADD_MSG;
                 end if;
-                
 
-            -- Only one cycle of padding is needed for inserting the 0x01 byte.
-            -- when PADD_HASH_MSG =>
-                 -- n_state_s <= EXTRACT_HASH_VALUE;
-                 
-            when PRE_EXTRACT_TAG =>
-                n_state_s <= RUN_XOODOO;
+            when PADD_MSG_ONLY_DOMAIN =>
                 if (decrypt_s = '1') then
-                    n_next_state_s <= VERIFY_TAG;
+                    n_state_s <= VERIFY_TAG;
                 else
-                    n_next_state_s <= EXTRACT_TAG;
+                    n_state_s <= EXTRACT_TAG;
                 end if;
+
+            when PADD_MSG_BLOCK =>
+                n_state_s <= ABSORB_MSG;
+
 
             -- Wait until the whole tag block is transferred, then go back to IDLE.
             when EXTRACT_TAG =>
-                if (bdo_valid_s = '1' and bdo_ready = '1' and word_cnt_s >= TAG_WORDS_C - 1) then
-                    n_state_s <= IDLE;
+                if(xoodoo_valid_s = '1' and xoodoo_start_s = '0') then
+                    if (bdo_valid_s = '1' and bdo_ready = '1' and word_cnt_s >= TAG_WORDS_C - 1) then
+                        n_state_s <= IDLE;
+                    else
+                        n_state_s <= EXTRACT_TAG;
+                    end if;
                 else
                     n_state_s <= EXTRACT_TAG;
                 end if;
@@ -518,8 +465,12 @@ begin
             -- Wait until the tag being verified is received, continue
             -- with waiting for acknowledgement on msg_auth_valid.
             when VERIFY_TAG =>
-                if (bdi_valid = '1' and bdi_ready_s = '1' and word_cnt_s >= TAG_WORDS_C - 1) then
-                    n_state_s <= WAIT_ACK;
+                if(xoodoo_valid_s = '1' and xoodoo_start_s = '0') then
+                    if (bdi_valid = '1' and bdi_ready_s = '1' and word_cnt_s >= TAG_WORDS_C - 1) then
+                        n_state_s <= WAIT_ACK;
+                    else
+                        n_state_s <= VERIFY_TAG;
+                    end if;
                 else
                     n_state_s <= VERIFY_TAG;
                 end if;
@@ -531,20 +482,9 @@ begin
                 else
                     n_state_s <= WAIT_ACK;
                 end if;
-                
-
-            -- Wait until the whole hash_value is transferred, then go back to IDLE.
-            when EXTRACT_HASH_VALUE =>
-                if (bdo_valid_s = '1' and bdo_ready = '1' and word_cnt_s >= HASH_WORDS_C - 1) then
-                    n_state_s <= IDLE;
-                else
-                    n_state_s <= EXTRACT_HASH_VALUE;
-                end if;
-                
 
             when others =>
                 n_state_s <= IDLE;
-                n_next_state_s <= IDLE;
 
         end case;
     end process p_next_state;
@@ -553,13 +493,12 @@ begin
     ----------------------------------------------------------------------------
     --! Decoder process for control logic
     ----------------------------------------------------------------------------
-    p_decoder : process(state_s, n_state_s, next_state_s, key_valid, key_ready_s, key_update, update_key_s, key_s,
-
+    p_decoder : process(state_s, n_state_s, key_valid, key_ready_s, key_update, update_key_s, key_s,
                             bdi_s, bdi_valid, bdi_ready_s, bdi_eoi, bdi_valid_bytes_s, bdi_pad_loc_s,
-                            bdi_size, bdi_type, eoi_s, hash_in, hash_s, empty_hash_s, decrypt_in, decrypt_s,
+                            bdi_size, bdi_type, eoi_s, decrypt_in, decrypt_s,
                             bdo_s, bdo_ready, word_cnt_s, msg_auth_s, msg_auth_valid_s, msg_auth_ready,
-                            first_block_s, 
-                            domain_s, xoodoo_valid_s, xoodoo_start_s, 
+                            first_block_s,
+                            domain_s, xoodoo_valid_s, xoodoo_start_s,
                             xoodoo_state_word_s)
     begin
         -- Default values preventing latches
@@ -569,10 +508,7 @@ begin
         n_msg_auth_s           <= msg_auth_s;
         n_eoi_s                <= eoi_s;
         n_update_key_s         <= update_key_s;
-        n_hash_s               <= hash_s;
-        n_empty_hash_s         <= empty_hash_s;
         n_decrypt_s            <= decrypt_s;
-        n_xoodoo_start_s       <= xoodoo_start_s;
         n_first_block_s        <= first_block_s;
         n_domain_s             <= domain_s;
         tag_ready_s            <= '0';
@@ -581,6 +517,7 @@ begin
         word_enable_in_s       <= '0';
         padd_s              <= (others => '0');
         padd_enable_s       <= '0';
+        n_xoodoo_start_s       <= '0';
 
         case state_s is
 
@@ -589,42 +526,22 @@ begin
             when IDLE =>
                 n_msg_auth_s    <= '1';
                 n_eoi_s         <= '0';
-                n_hash_s        <= '0';
-                n_empty_hash_s  <= '0';
                 n_decrypt_s     <= '0';
                 n_first_block_s <= '1';
                 init_reg_s      <= '1';
                 if (key_valid = '1' and key_update = '1') then
                     n_update_key_s  <= '1';
                 end if;
-                if (bdi_valid = '1' and hash_in = '1') then
-                    n_hash_s        <= '1';
-                    if (bdi_size = EMPTY_HASH_SIZE_C) then
-                        n_empty_hash_s  <= '1';
-                        n_eoi_s         <= '1';
-                    end if;
-                end if;
-                
-
-            -- If empty hash is detected, acknowledge with one cycle bdi_ready.
-            -- Afterwards empty_hash_s flag can be deasserted, it's not needed anymore.
-            -- Enable tag_ram.
-            when INIT_HASH =>
-                if (empty_hash_s = '1') then
-                    bdi_ready_s     <= '1';
-                    n_empty_hash_s  <= '0';
-                end if;
-                
 
             -- If key must be updated, assert key_ready.
             when STORE_KEY =>
-                --if (update_key_s = '1') then
-                    key_ready_s <= update_key_s;--'1';
-                --end if;
-                --if ((key_valid = '1' and key_ready_s = '1')) then
+                if (update_key_s = '1') then
+                    key_ready_s <= '1';
+                end if;
+                if ((key_valid = '1' and key_ready_s = '1')) then
                     word_in_s <= key_s;
-                    word_enable_in_s <= key_valid and key_ready_s;--'1';                    
-                --end if;
+                    word_enable_in_s <= '1';
+                end if;
                 n_domain_s <= DOMAIN_ABSORB_KEY;
 
             when PADD_KEY =>
@@ -632,17 +549,14 @@ begin
                 word_enable_in_s <= '1';
                 padd_s <= domain_s;
                 padd_enable_s <= '1';
-
-            when PRE_ABSORB_NONCE =>
                 n_xoodoo_start_s <= '1';
                 n_domain_s <= DOMAIN_ABSORB;
 
-            when RUN_XOODOO =>
-                n_xoodoo_start_s <= '0';
-
             -- Store bdi_eoi (will only be effective on last word) and decrypt_in flag.
             when ABSORB_NONCE =>
-                bdi_ready_s     <= '1';
+                if (xoodoo_valid_s = '1' and xoodoo_start_s = '0') then
+                    bdi_ready_s     <= '1';
+                end if;
                 n_eoi_s         <= bdi_eoi;
                 n_decrypt_s     <= decrypt_in;
                 if (bdi_valid = '1' and bdi_ready_s = '1' and bdi_type = HDR_NPUB) then
@@ -656,74 +570,61 @@ begin
                 word_enable_in_s <= '1';
                 padd_s <= domain_s;
                 padd_enable_s <= '1';
-
-            when PRE_ABSORB_AD =>
-                if not(bdi_valid = '1' and (bdi_type = HDR_PT or bdi_type = HDR_CT)) then
-                    n_xoodoo_start_s <= '1';
-                end if;
+                n_xoodoo_start_s <= '1';
 
             -- If pt or ct is detected, don't assert bdi_ready, otherwise first word
             -- gets lost. Store bdi_eoi.
             -- padd() returns vector containing bdi_s and inserted 0x01 byte according
             -- to 0100* padding.
             when ABSORB_AD =>
-                if not (bdi_valid = '1' and (bdi_type = HDR_PT or bdi_type = HDR_CT)) then
-                    bdi_ready_s <= '1';
-                end if;
-                if (bdi_valid = '1' and bdi_ready_s = '1') then
-                    n_eoi_s         <= bdi_eoi;
-                    if (bdi_type = HDR_AD) then
-                        word_in_s <= padd(bdi_s, bdi_valid_bytes_s, bdi_pad_loc_s);
-                        word_enable_in_s <= '1';
+                if(eoi_s = '0') then
+                    if not (bdi_valid = '1' and (bdi_type = HDR_PT or bdi_type = HDR_CT)) then
+                        if (xoodoo_valid_s = '1' and xoodoo_start_s = '0') then
+                            bdi_ready_s <= '1';
+                        end if;
+                    end if;
+                    if (bdi_valid = '1' and bdi_ready_s = '1') then
+                        n_eoi_s         <= bdi_eoi;
+                        if (bdi_type = HDR_AD) then
+                            word_in_s <= padd(bdi_s, bdi_valid_bytes_s, bdi_pad_loc_s);
+                            word_enable_in_s <= '1';
+                        end if;
                     end if;
                 end if;
-                
-
-            -- Set bdi_ready and connect the valid hash_msg bytes to tag_ram for
-            -- absorbtion.
-            when ABSORB_HASH_MSG =>
-                bdi_ready_s <= '1';
-                
 
             -- Insert 0x01 padding byte (state is only reached if not yet inserted).
-            when PADD_AD | PADD_HASH_MSG =>
+            when PADD_AD  =>
                 if (word_cnt_s < STATE_WORDS_C-1 ) then
                     word_in_s <= PADD_01;
                     word_enable_in_s <= '1';
-                    padd_s <= domain_s;
+                    padd_s <= domain_s xor DOMAIN_CRYPT;
                     padd_enable_s <= '1';
                 else
-                    padd_s <= PADD_01 xor domain_s;
+                    padd_s <= PADD_01 xor domain_s xor DOMAIN_CRYPT;
                     padd_enable_s <= '1';
                 end if;
-                    n_domain_s <= DOMAIN_ZERO;
+                n_domain_s <= DOMAIN_ZERO;
+                n_xoodoo_start_s <= '1';
+                --n_first_block_s <= '0';
 
             when PADD_AD_ONLY_DOMAIN =>
+                padd_s <= domain_s xor DOMAIN_CRYPT;
+                padd_enable_s <= '1';
                 n_domain_s <= DOMAIN_ZERO;
-                padd_s <= domain_s;
-                padd_enable_s <= '1'; 
-                
+                --n_first_block_s <= '0';
+                n_xoodoo_start_s <= '1';
 
             when PADD_AD_BLOCK =>
-                n_domain_s <= DOMAIN_ZERO;
                 padd_s <= PADD_01 xor domain_s;
-                padd_enable_s <= '1';        
-
-            when PRE_ABSORB_MSG =>
-                bdi_ready_s     <= '0';
-                if (first_block_s = '1') then
-                    n_first_block_s <= '0';
-                    padd_s <= DOMAIN_CRYPT;
-                    padd_enable_s <= '1';
-                else
-                    padd_s <= DOMAIN_ZERO;
-                    padd_enable_s <= '1';
-                end if;
+                padd_enable_s <= '1';
+                n_domain_s <= DOMAIN_ZERO;
                 n_xoodoo_start_s <= '1';
 
             -- Generate CT / PT
             when ABSORB_MSG =>
-                bdi_ready_s <= bdo_ready;
+                if(xoodoo_valid_s = '1' and xoodoo_start_s = '0') then
+                    bdi_ready_s <= bdo_ready;
+                end if;
                 if (bdi_valid = '1' and bdi_ready_s = '1') then
                     if (decrypt_s = '0' and bdi_type = HDR_PT) then
                         word_in_s <= padd(bdi_s, bdi_valid_bytes_s, bdi_pad_loc_s);
@@ -735,33 +636,40 @@ begin
                 end if;
 
             when PADD_MSG =>
-                word_in_s <= PADD_01;
-                word_enable_in_s <= '1';
+                if(xoodoo_valid_s = '1' and xoodoo_start_s = '0') then
+                    word_in_s <= PADD_01;
+                    word_enable_in_s <= '1';
+                    n_xoodoo_start_s <= '1';
+                    padd_s <= DOMAIN_SQUEEZE;
+                    padd_enable_s <= '1';
+                end if;
 
             when PADD_MSG_ONLY_DOMAIN =>
-
-            when PADD_MSG_BLOCK =>
-                word_in_s <= PADD_01;
-                word_enable_in_s <= '1';
-
-            when PRE_EXTRACT_TAG =>
                 n_xoodoo_start_s <= '1';
                 padd_s <= DOMAIN_SQUEEZE;
                 padd_enable_s <= '1';
 
+            when PADD_MSG_BLOCK =>
+                word_in_s <= PADD_01;
+                word_enable_in_s <= '1';
+                n_xoodoo_start_s <= '1';
+
             when EXTRACT_TAG =>
-                tag_ready_s <= '1';
+                if(xoodoo_valid_s = '1' and xoodoo_start_s = '0') then
+                    tag_ready_s <= '1';
+                end if;
 
             -- As soon as bdi input doesn't match with calculated tag in ram,
             -- reset msg_auth.
             when VERIFY_TAG =>
-                bdi_ready_s <= '1';
+                if(xoodoo_valid_s = '1' and xoodoo_start_s = '0') then
+                    bdi_ready_s <= '1';
+                end if;
                 if (bdi_valid = '1' and bdi_ready_s = '1' and bdi_type = HDR_TAG) then
                     if (bdi_s /= xoodoo_state_word_s) then
                         n_msg_auth_s <= '0';
                     end if;
                 end if;
-                
 
             -- Signal msg auth valid.
             when WAIT_ACK =>
@@ -846,41 +754,14 @@ begin
                             end if;
                         end if;
 
-                    -- Increase word counter when transferring data until either the block size
-                    -- for hash msg is reached or the last word is transferred and it's only
-                    -- partially filled (again such that 0x01 can be inserted).
-                    when ABSORB_HASH_MSG =>
-                        if (bdi_valid = '1' and bdi_ready_s = '1') then
-                            if (word_cnt_s >= HASH_WORDS_C - 1 or (bdi_eot = '1' and bdi_partial_s = '1')) then
-                                word_cnt_s <= 0;
-                            else
-                                word_cnt_s <= word_cnt_s + 1;
-                            end if;
-                        end if;
-
-                    -- Reset word counters here. Due to 0100* padding, only one 0x01
-                    -- Byte has to be inserted in this state.
-                    when PADD_AD | PADD_MSG | PADD_HASH_MSG | PADD_AD_BLOCK | PADD_AD_ONLY_DOMAIN | PADD_MSG_BLOCK | PADD_MSG_ONLY_DOMAIN  =>
+                    -- Reset word counters here.
+                when PADD_AD | PADD_MSG  | PADD_AD_BLOCK | PADD_AD_ONLY_DOMAIN | PADD_MSG_BLOCK | PADD_MSG_ONLY_DOMAIN  =>
                         word_cnt_s <= 0;
 
-                    -- Increase word counter up to block size or hash block size
-                    -- depending on whether input is currently hashed or not.
-                    -- when ABSORB_LENGTH | INIT_HASH =>
-                    when INIT_HASH =>
-                        if (word_cnt_s >= BLOCK_WORDS_C - 1 and hash_s = '0')
-                        or (word_cnt_s >= HASH_WORDS_C - 1 and hash_s = '1') then
-                            word_cnt_s  <= 0;
-                        else
-                            word_cnt_s <= word_cnt_s + 1;
-                        end if;
-
-                    -- Increase word counter on valid bdo transfer until either
-                    -- block size or hash block size is reached depending on whether
-                    -- input is hashed or not.
-                    when EXTRACT_TAG | EXTRACT_HASH_VALUE =>
+                    -- Increase word counter on valid bdo transfer until block size is reached.
+                when EXTRACT_TAG =>
                         if (tag_ready_s = '1' and bdo_ready = '1') then
-                            if (word_cnt_s >= TAG_WORDS_C - 1 and hash_s = '0')
-                            or (word_cnt_s >= HASH_WORDS_C - 1 and hash_s = '1') then
+                        if (word_cnt_s >= TAG_WORDS_C - 1) then
                                 word_cnt_s  <= 0;
                             else
                                 word_cnt_s <= word_cnt_s + 1;

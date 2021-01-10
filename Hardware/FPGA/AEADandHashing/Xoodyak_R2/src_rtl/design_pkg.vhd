@@ -24,6 +24,8 @@ package Design_pkg is
 --------------------------------------------------------------------------------
 ------------------------- DO NOT CHANGE ANYTHING BELOW -------------------------
 --------------------------------------------------------------------------------
+    -- asynchronous reset active high
+    constant active_rst_p : std_logic := '1';
 
     --! design parameters needed by the PreProcessor, PostProcessor, and LWC; assigned in the package body below!
     

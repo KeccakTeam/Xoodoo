@@ -16,8 +16,10 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
+use work.NIST_LWAPI_pkg.all;
+
 entity fwft_fifo is
-    generic(
+	generic(
         G_W         : integer; --! Width of I/O (bits)
         G_LOG2DEPTH : integer  --! LOG(2) of depth
     );
@@ -43,11 +45,12 @@ end entity fwft_fifo;
 architecture structure of fwft_fifo is
 
     -- FIFO depth in words
-    constant DEPTH_C : integer := 2**G_LOG2DEPTH;
+    constant DEPTH_C : integer := 2 ** G_LOG2DEPTH;
 
     -- Memory type and signal definition
     type mem_t is array (0 to DEPTH_C - 1) of std_logic_vector(G_W - 1 downto 0);
     signal mem_s            : mem_t;
+    signal mem_s_next       : mem_t;
 
     -- Internal handshake signals
     signal din_ready_s      : std_logic := '0';
@@ -57,13 +60,16 @@ architecture structure of fwft_fifo is
     signal empty_s          : std_logic;
     signal full_s           : std_logic;
     signal wr_ptr_s         : integer range 0 to DEPTH_C - 1;
+    signal wr_ptr_s_next    : integer range 0 to DEPTH_C - 1;
     signal rd_ptr_s         : integer range 0 to DEPTH_C - 1;
+    signal rd_ptr_s_next    : integer range 0 to DEPTH_C - 1;
 
     -- Although we use an additional counter for generating din_ready and
     -- dout_valid, standalone synthesis shows less ressource usage.
     -- In addition to that, the entries counter can be used for
     -- generating additional full/empty flags and programmable full/empty flags.
-    signal entries_s        : integer range 0 to DEPTH_C;
+    signal entries_s        : integer range 0  to DEPTH_C;
+    signal entries_s_next   : integer range - 1 to DEPTH_C+1;
 
 begin
 
@@ -82,6 +88,15 @@ begin
 
     -- Counting the numbers of entries, setting rd-/wr-pointers and
     -- writing the data into the memory.
+    
+    p_mem : process(clk)
+    begin
+    	if rising_edge(clk) then
+    		mem_s <= mem_s_next;
+    	end if;
+    end process p_mem;
+    	
+	GEN_p_ptr_SYNC_RST: if (not ASYNC_RSTN) generate
     p_ptr : process(clk)
     begin
         if rising_edge(clk) then
@@ -90,38 +105,64 @@ begin
                 rd_ptr_s    <= 0;
                 entries_s   <= 0;
             else
+            	wr_ptr_s    <= wr_ptr_s_next;
+                rd_ptr_s    <= rd_ptr_s_next;
+                entries_s   <= entries_s_next;
+        	end if;
+          end if;
+    end process p_ptr;
+	end generate GEN_p_ptr_SYNC_RST;
 
-                -- Increase entry counter if data is written but not read
-                -- Decrease entry counter if data is read but not written
-                if (din_valid = '1' and din_ready_s = '1'
-                and (dout_valid_s = '0' or dout_ready = '0')) then
-                    entries_s <= entries_s + 1;
-                elsif ((din_valid = '0' or din_ready_s = '0')
-                and dout_valid_s = '1' and dout_ready = '1') then
-                    entries_s <= entries_s - 1;
-                end if;
-
-                -- Write into memory and increase write pointer
-                if (din_valid = '1' and din_ready_s = '1') then
-                    mem_s(wr_ptr_s) <= din;
-                    if (wr_ptr_s >= DEPTH_C - 1) then
-                        wr_ptr_s <= 0;
-                    else
-                        wr_ptr_s <= wr_ptr_s + 1;
-                    end if;
-                end if;
-
-                -- Increase read pointer if data is read
-                if (dout_valid_s = '1' and dout_ready = '1') then
-                    if (rd_ptr_s >= DEPTH_C - 1) then
-                        rd_ptr_s <= 0;
-                    else
-                        rd_ptr_s <= rd_ptr_s + 1;
-                    end if;
-                end if;
-
-            end if;
+	GEN_p_ptr_ASYNC_RSTN: if (ASYNC_RSTN) generate
+    p_ptr : process(clk, rst)
+    begin
+	    if (rst = '0') then
+	        wr_ptr_s    <= 0;
+	        rd_ptr_s    <= 0;
+	        entries_s   <= 0;
+        elsif rising_edge(clk) then
+        	wr_ptr_s    <= wr_ptr_s_next;
+            rd_ptr_s    <= rd_ptr_s_next;
+            entries_s   <= entries_s_next;
         end if;
     end process p_ptr;
+    end generate GEN_p_ptr_ASYNC_RSTN;
+    
+	p_ptr_comb : process(din, din_ready_s, din_valid, dout_ready, dout_valid_s, entries_s, rd_ptr_s, wr_ptr_s, mem_s)
+	begin
+		
+		wr_ptr_s_next  <= wr_ptr_s;
+		rd_ptr_s_next  <= rd_ptr_s;
+		entries_s_next <= entries_s;
+		mem_s_next     <= mem_s;
+        -- Increase entry counter if data is written but not read
+        -- Decrease entry counter if data is read but not written
+        if (din_valid = '1' and din_ready_s = '1'
+        and (dout_valid_s = '0' or dout_ready = '0')) then
+            entries_s_next <= entries_s + 1;
+        elsif ((din_valid = '0' or din_ready_s = '0')
+        and dout_valid_s = '1' and dout_ready = '1') then
+            entries_s_next <= entries_s - 1;
+        end if;
+
+        -- Write into memory and increase write pointer
+        if (din_valid = '1' and din_ready_s = '1') then
+            mem_s_next(wr_ptr_s) <= din;
+            if (wr_ptr_s >= DEPTH_C - 1) then
+                wr_ptr_s_next <= 0;
+            else
+                wr_ptr_s_next <= wr_ptr_s + 1;
+            end if;
+        end if;
+
+        -- Increase read pointer if data is read
+        if (dout_valid_s = '1' and dout_ready = '1') then
+            if (rd_ptr_s >= DEPTH_C - 1) then
+                rd_ptr_s_next <= 0;
+            else
+                rd_ptr_s_next <= rd_ptr_s + 1;
+            end if;
+        end if;
+    end process p_ptr_comb;
 
 end architecture structure;

@@ -1,4 +1,3 @@
-LWC/std_logic_1164_additions.vhd
 design_pkg.vhd
 xoodoo_globals.vhd
 LWC/NIST_LWAPI_pkg.vhd

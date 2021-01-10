@@ -24,7 +24,8 @@
 
 library ieee;
 use ieee.std_logic_1164.all;
-use work.Design_pkg.all;
+
+use work.design_pkg.all;
 use work.NIST_LWAPI_pkg.all;
 
 entity LWC is
@@ -37,7 +38,8 @@ entity LWC is
         pdi_valid       : in  std_logic;
         pdi_ready       : out std_logic;
         --! Secret data ports
-        sdi_data        : in  std_logic_vector(SW-1 downto 0);
+        -- NOTE for future dev: this G_W is really SW!
+        sdi_data        : in  std_logic_vector(W-1 downto 0);
         sdi_valid       : in  std_logic;
         sdi_ready       : out std_logic;
         --! Data out ports
@@ -49,6 +51,7 @@ entity LWC is
 end LWC;
 
 architecture structure of LWC is
+	
     --==========================================================================
     --!Cipher
     --==========================================================================
@@ -76,14 +79,14 @@ architecture structure of LWC is
     signal bdo_ready_cipher_out     : std_logic;
     ------!Cipher to Post-Processor
     signal end_of_block_cipher_out  : std_logic;
-    signal bdo_size_cipher_out      : std_logic_vector(3       -1 downto 0);
+    -- signal bdo_size_cipher_out      : std_logic_vector(3       -1 downto 0);
     signal bdo_valid_bytes_cipher_out:std_logic_vector(CCWdiv8 -1 downto 0);
-    signal bdo_type_cipher_out      :std_logic_vector(4        -1 downto 0);
-    signal decrypt_cipher_out       : std_logic;
+--    signal bdo_type_cipher_out      :std_logic_vector(4        -1 downto 0);
+    -- signal decrypt_cipher_out       : std_logic;
     signal msg_auth_valid           : std_logic;
     signal msg_auth_ready           : std_logic;
     signal msg_auth                 : std_logic;
-    signal done                     : std_logic;
+    -- signal done                     : std_logic;
     --==========================================================================
 
     --==========================================================================
@@ -98,12 +101,69 @@ architecture structure of LWC is
     signal cmd_valid_FIFO_out       : std_logic;
     signal cmd_ready_FIFO_out       : std_logic;
     --==========================================================================
+    
+    component CryptoCore
+    	port(
+    		clk             : in  STD_LOGIC;
+    		rst             : in  STD_LOGIC;
+    		key             : in  STD_LOGIC_VECTOR(CCSW - 1 downto 0);
+    		key_valid       : in  STD_LOGIC;
+    		key_ready       : out STD_LOGIC;
+    		bdi             : in  STD_LOGIC_VECTOR(CCW - 1 downto 0);
+    		bdi_valid       : in  STD_LOGIC;
+    		bdi_ready       : out STD_LOGIC;
+    		bdi_pad_loc     : in  STD_LOGIC_VECTOR(CCWdiv8 - 1 downto 0);
+    		bdi_valid_bytes : in  STD_LOGIC_VECTOR(CCWdiv8 - 1 downto 0);
+    		bdi_size        : in  STD_LOGIC_VECTOR(3 - 1 downto 0);
+    		bdi_eot         : in  STD_LOGIC;
+    		bdi_eoi         : in  STD_LOGIC;
+    		bdi_type        : in  STD_LOGIC_VECTOR(4 - 1 downto 0);
+    		decrypt_in      : in  STD_LOGIC;
+    		key_update      : in  STD_LOGIC;
+    		hash_in         : in  std_logic;
+    		bdo             : out STD_LOGIC_VECTOR(CCW - 1 downto 0);
+    		bdo_valid       : out STD_LOGIC;
+    		bdo_ready       : in  STD_LOGIC;
+    		bdo_type        : out STD_LOGIC_VECTOR(4 - 1 downto 0);
+    		bdo_valid_bytes : out STD_LOGIC_VECTOR(CCWdiv8 - 1 downto 0);
+    		end_of_block    : out STD_LOGIC;
+    		msg_auth_valid  : out STD_LOGIC;
+    		msg_auth_ready  : in  STD_LOGIC;
+    		msg_auth        : out STD_LOGIC
+    	);
+    end component CryptoCore;
 begin
 
-    assert (ASYNC_RSTN = false) report "Asynchronous reset is not supported!" severity failure;
+	-- Width parameters sanity checks
+	-- See 'Implementer’s Guide to Hardware Implementations Compliant with the Hardware API for LWC', sec. 4.3:
+	-- "The following combinations (w, ccw) are supported in the current version
+    --   of the Development Package: (32, 32), (32, 16), (32, 8), (16, 16), and (8, 8).
+    --   The following combinations (sw, ccsw) are supported: (32, 32), (32, 16),
+    --   (32, 8), (16, 16), and (8, 8). However, w and sw must be always the same."
+
+    assert false report "[LWC] GW=" & integer'image(W) &
+        ", SW=" & integer'image(SW) &
+        ", CCW=" & integer'image(CCW) &
+        ", CCSW=" & integer'image(CCSW) severity note;
+    
+    assert ((W = 32 and (CCW = 32 or CCW = 16 or CCW = 8)) or 
+    	(W = 16 and CCW = 16) or (W = 8 and CCW = 8)) 
+    	report "[LWC] Invalid combination of (G_W, CCW)" severity failure;
+    	
+    assert ((SW = 32 and (CCSW = 32 or CCSW = 16 or CCSW = 8)) or 
+    	(SW = 16 and CCSW = 16) or (SW = 8 and CCSW = 8)) 
+    	report "[LWC] Invalid combination of (SW, CCSW)" severity failure;
+	
+	-- ASYNC_RSTN notification
+    assert (ASYNC_RSTN = false) report "[LWC] ASYNC_RSTN=True: reset is configured as asynchronous and active-low" severity note;
 
     Inst_PreProcessor: entity work.PreProcessor(PreProcessor)
-        PORT MAP(
+    	generic map(
+        		G_W             => W,
+        		G_SW            => SW,
+        		G_ASYNC_RSTN    => ASYNC_RSTN
+			)
+        port map(
                 clk             => clk                                     ,
                 rst             => rst                                     ,
                 pdi_data        => pdi_data                                ,
@@ -131,8 +191,8 @@ begin
                 cmd_valid       => cmd_valid_FIFO_in                       ,
                 cmd_ready       => cmd_ready_FIFO_in
             );
-    Inst_Cipher: entity work.CryptoCore(behavioral)
-        PORT MAP(
+    Inst_Cipher: CryptoCore
+        port map(
                 clk             => clk                                     ,
                 rst             => rst                                     ,
                 key             => key_cipher_in                           ,
@@ -153,7 +213,7 @@ begin
                 bdo             => bdo_cipher_out                          ,
                 bdo_valid       => bdo_valid_cipher_out                    ,
                 bdo_ready       => bdo_ready_cipher_out                    ,
-                bdo_type        => bdo_type_cipher_out                     ,
+--                bdo_type        => bdo_type_cipher_out                     ,
                 bdo_valid_bytes => bdo_valid_bytes_cipher_out              ,
                 end_of_block    => end_of_block_cipher_out                 ,
                 msg_auth_valid  => msg_auth_valid                          ,
@@ -161,14 +221,18 @@ begin
                 msg_auth        => msg_auth
             );
     Inst_PostProcessor: entity work.PostProcessor(PostProcessor)
-        PORT MAP(
+    	generic map(
+        		G_W            => W,
+        		G_ASYNC_RSTN   => ASYNC_RSTN
+        	)
+        port map(
                 clk             => clk                                     ,
                 rst             => rst                                     ,
                 bdo             => bdo_cipher_out                          ,
                 bdo_valid       => bdo_valid_cipher_out                    ,
                 bdo_ready       => bdo_ready_cipher_out                    ,
                 end_of_block    => end_of_block_cipher_out                 ,
-                bdo_type        => bdo_type_cipher_out                     ,
+--                bdo_type        => bdo_type_cipher_out                     ,
                 bdo_valid_bytes => bdo_valid_bytes_cipher_out              ,
                 cmd             => cmd_FIFO_out                            ,
                 cmd_valid       => cmd_valid_FIFO_out                      ,
@@ -186,7 +250,7 @@ begin
                 G_W             => W,
                 G_LOG2DEPTH     => 2
             )
-        PORT MAP(
+        port map(
                 clk             => clk,
                 rst             => rst,
                 din             => cmd_FIFO_in,

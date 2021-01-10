@@ -83,7 +83,6 @@ begin  -- Rtl
                         reg_value(2)(3) <= reg_value(2)(3) xor domain_i;
                     end if;
                     if(word_enable_in = '1') then
-                        --reg_value(word_index_in/4)(word_index_in-(word_index_in/4)*4) <= reg_value(word_index_in/4)(word_index_in-(word_index_in/4)*4) xor word_in;
                         reg_value(word_index_in/4)(word_index_in mod 4) <= reg_value(word_index_in/4)(word_index_in mod 4) xor word_in;
                     end if;
                 end if;
@@ -92,7 +91,6 @@ begin  -- Rtl
     end process begReg;
 
 state_out <= reg_value;
---word_out <= reg_value(word_index_in/4)(word_index_in-(word_index_in/4)*4);
 word_out <= reg_value(word_index_in/4)(word_index_in mod 4);
 
 end rtl;

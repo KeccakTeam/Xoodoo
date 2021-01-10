@@ -7,15 +7,15 @@ File name           | Used  | Release number | Functional
                     |       |                | modifications
                     | (Y/N) |                | (Y/N)
 ===================================================================
-NIST_LWAPI_pkg.vhd  |   Y   |     v1.0.3     | N
-StepDownCountLd.vhd |   Y   |     v1.0.3     | N
-data_piso.vhd       |   Y   |     v1.0.3     | N
-data_sipo.vhd       |   Y   |     v1.0.3     | N
-key_piso.vhd        |   Y   |     v1.0.3     | N
-PreProcessor.vhd    |   Y   |     v1.0.3     | N
-PostProcessor.vhd   |   Y   |     v1.0.3     | N
-fwft_fifo.vhd       |   Y   |     v1.0.3     | N
-LWC.vhd             |   Y   |     v1.0.3     | N
+NIST_LWAPI_pkg.vhd  |   Y   |     v1.1.0     | N
+StepDownCountLd.vhd |   Y   |     v1.1.0     | N
+data_piso.vhd       |   Y   |     v1.1.0     | N
+data_sipo.vhd       |   Y   |     v1.1.0     | N
+key_piso.vhd        |   Y   |     v1.1.0     | N
+PreProcessor.vhd    |   Y   |     v1.1.0     | N
+PostProcessor.vhd   |   Y   |     v1.1.0     | N
+fwft_fifo.vhd       |   Y   |     v1.1.0     | N
+LWC.vhd             |   Y   |     v1.1.0     | N
 
 
 C. Supported types and order of segment types
