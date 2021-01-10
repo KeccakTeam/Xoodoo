@@ -27,6 +27,8 @@ use IEEE.STD_LOGIC_1164.all;
 
 package NIST_LWAPI_pkg is
 
+    constant ASYNC_RSTN : boolean := true;
+
     --! External bus: supported values are 8, 16 and 32 bits
     constant W       : integer :=32;
     constant SW      : integer :=W;

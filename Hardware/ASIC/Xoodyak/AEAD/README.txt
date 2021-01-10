@@ -1,11 +1,25 @@
 Hardware Design Group: Xoodyak Team + Silvia
 Primary Hardware Designers: Silvia Mella, silvia.mella@st.com
-LWC candidate: Xoodyak (AEAD, no hashing)
+LWC candidate: Xoodyak (AEAD only)
 
 Xoodyak Hardware Implementation
 ===============================
 
 This is a hardware implementation of Xoodyak authenticated encryption, compliant with the Hardware API for Lightweight Cryptography.
+
+
+
+Changelog
+---------
+Jan 10, 2021
+* Source code: 
+  * Updated testbench to version v1.1.0 of the Development Package for the LWC Hardware API
+  * Modified CryptoCore.vhd to remove two clock cycles for each input block 
+
+Oct 19, 2020
+Initial version
+
+
 
 Notes
 --------------------------------------------------------
@@ -34,22 +48,35 @@ Formula to calculate throughput from the clock frequency
 --------------------------------------------------------
 
 The formula depends on the operation and on the value of the constant roundsPerCycle.
+
+Notation
+Na, Nm, Nc : the number of complete blocks of associated data, plaintext, and ciphertext, respectively
+Ina, Inm, Inc : binary variables equal to 1 if the last block of the respective data type is incomplete, and 0 otherwise
+Bla, Blm, Blc : the number of bytes in the incomplete block of associated data, plaintext, and ciphertext, respectively.
+
+Execution time of authenticated encryption:
+14 + 12/roundsPerCycle + max(1,11*Na+Ina*ceil(Bla/4)) + (1+12/roundsPerCycle)*(max(1,Na+Ina)) + 6*Nm + Inm*ceil(Blm/4) + (1+12/roundsPerCycle)*(max(1,Nm+Inm)) + 4 + 12/roundsPerCycle
+
+Execution time of authenticated decryption:
+14 + 12/roundsPerCycle + max(1,11*Na+Ina*ceil(Bla/4)) + (1+12/roundsPerCycle)*(max(1,Na+Ina)) + 6*Nc + Inc*ceil(Blc/4) + (1+12/roundsPerCycle)*(max(1,Nc+Inc)) + 4 + 12/roundsPerCycle + 1
+
+Formulas above give the following throughput for long messages.
 Let F denote the frequency.
 
-Throughput for Encryption and Decryption: 192/(192/32+1+2+12/roundsPerCycle)*F
-Throughput for Authentication           : 352/(352/32+1+2+12/roundsPerCycle)*F
+Throughput for Encryption and Decryption: 192/(192/32+1+12/roundsPerCycle)*F
+Throughput for Authentication           : 352/(352/32+1+12/roundsPerCycle)*F
 
 Formulas above give the following throughput:
         
  Rounds per clock cycle | 
  (roundsPerCycle)       |  Encryption  |  Decryption  | Authentication 
 =======================================================================
-        1               |    9.143*F   |    9.143*F   |     13.539*F   
-        2               |   12.800*F   |   12.800*F   |     17.600*F   
-        3               |   14.769*F   |   14.769*F   |     19.556*F   
-        4               |   16.000*F   |   16.000*F   |     20.706*F   
-        6               |   17.455*F   |   17.455*F   |     22.000*F   
-       12               |   19.200*F   |   19.200*F   |     23.467*F   
+        1               |   10.105*F   |   10.105*F   |     14.667*F   
+        2               |   14.769*F   |   14.769*F   |     19.556*F   
+        3               |   17.455*F   |   17.455*F   |     22.000*F   
+        4               |   19.200*F   |   19.200*F   |     23.467*F   
+        6               |   21.333*F   |   21.333*F   |     25.143*F   
+       12               |   24.000*F   |   24.000*F   |     27.077*F   
 
 
 
@@ -63,11 +90,10 @@ Expected area in gate equivalents
 
 
 
-Code avaialbility
+Code availability
 --------------------------------------------------------
 
-The code will soon be available on GitHub: https://github.com/KeccakTeam/Xoodoo
-Please, link such repository instead of making the code available on https://github.com/mustafam001/lwc-aead-rtl
+The code is available on GitHub: https://github.com/KeccakTeam/Xoodoo
 
 
 
@@ -84,7 +110,7 @@ Known-Answer-Test files folder.
 
 VHDL source code for Xoodyak.
 
-* `./LWC`
+    * `./LWC`
 
     Files being a part of the Development Package for the LWC Hardware API.
 

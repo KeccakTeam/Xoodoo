@@ -69,7 +69,6 @@ i0200: for y in 0 to 2 generate
     end generate;
 end generate;
 
-
 -- rho west
 i3001: for x in 0 to 3 generate
     i3002: for i in 0 to 31 generate
@@ -88,7 +87,6 @@ i3112: for x in 0 to 3 generate
         rho_w_out(2)(x)(i) <= rho_w_in(2)(x)((i-11) mod 32);
     end generate;
 end generate;
-
 
 -- iota
 i4001: for x in 1 to 3 generate

@@ -61,6 +61,7 @@ package design_pkg is
     constant PADD_01     : std_logic_vector(CCW-1 downto 0) := (CCW-1 downto 1 => '0') & '1'; -- 0x01;
     constant PADD_01_KEY : std_logic_vector(CCW-1 downto 0) := (CCW-1 downto 9 => '0') & '1' & (7 downto 0 => '0'); -- 0x0100;
       
+    --constant DOMAIN_ABSORB_HASH : std_logic_vector(CCW-1 downto 0);
     constant DOMAIN_ZERO        : std_logic_vector(CCW-1 downto 0);
     constant DOMAIN_ABSORB_KEY  : std_logic_vector(CCW-1 downto 0);
     constant DOMAIN_ABSORB      : std_logic_vector(CCW-1 downto 0);
@@ -202,6 +203,7 @@ package body design_pkg is
         return res;
     end function;
     
+    --constant DOMAIN_ABSORB_HASH : std_logic_vector(CCW-1 downto 0) := domain_word(X"01"); -- 0x00;
     constant DOMAIN_ZERO        : std_logic_vector(CCW-1 downto 0) := domain_word(X"00"); -- 0x00;
 	constant DOMAIN_ABSORB_KEY  : std_logic_vector(CCW-1 downto 0) := domain_word(X"02"); -- 0x02;
 	constant DOMAIN_ABSORB      : std_logic_vector(CCW-1 downto 0) := domain_word(X"03"); -- 0x03;
