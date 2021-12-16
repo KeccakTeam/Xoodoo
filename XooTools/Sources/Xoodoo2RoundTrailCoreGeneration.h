@@ -459,6 +459,7 @@ public:
                 if (current.side == ColoredBit::Before)
                     current.side = ColoredBit::After;
                 else {
+                    current.side = ColoredBit::Before;
                     current.z++;
                     if (current.z == (int)instance.getSizeZ()) {
                         current.z = 0;
